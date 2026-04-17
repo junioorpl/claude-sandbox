@@ -5,11 +5,14 @@ on:
   push:
     branches: [main]
 
+permissions:
+  contents: read
+
 jobs:
   gitignore-check:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
       - name: Ensure no orgs/*/.env committed
         run: |
           set -e
@@ -21,7 +24,48 @@ jobs:
   shell-lint:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
       - run: sudo apt-get update && sudo apt-get install -y shellcheck bats
       - run: shellcheck bin/claude-sandbox bin/setup bin/install-alias bin/publish-image .devcontainer/init-firewall-wrapper.sh
       - run: bats tests/launcher.bats tests/firewall.bats
+
+  version-bump-gate:
+    runs-on: ubuntu-latest
+    if: github.event_name == 'pull_request'
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+        with:
+          fetch-depth: 0
+          ref: ${{ github.event.pull_request.head.sha }}
+      - name: Check VERSION bump for breaking-capable changes
+        env:
+          BASE_REF: ${{ github.event.pull_request.base.ref }}
+          PR_BODY: ${{ github.event.pull_request.body }}
+        run: |
+          set -e
+          git fetch origin "$BASE_REF" --depth=1
+          changed="$(git diff --name-only "origin/$BASE_REF"...HEAD || true)"
+          echo "Changed files:"
+          echo "$changed"
+
+          sensitive_re='^(\.devcontainer/(Dockerfile|init-firewall\.sh|init-firewall-wrapper\.sh)|docker-compose\.yml|bin/claude-sandbox)$'
+          if ! echo "$changed" | grep -Eq "$sensitive_re"; then
+            echo "No sensitive paths changed. Skipping gate."
+            exit 0
+          fi
+
+          if echo "$PR_BODY" | grep -q '\[skip-version-check\]'; then
+            echo "Override present in PR body. Skipping gate."
+            exit 0
+          fi
+
+          base_version="$(git show "origin/$BASE_REF:VERSION" 2>/dev/null | tr -d '[:space:]' || echo '0.0.0')"
+          head_version="$(tr -d '[:space:]' < VERSION 2>/dev/null || echo '0.0.0')"
+
+          echo "base VERSION=$base_version  head VERSION=$head_version"
+
+          if [ "$base_version" = "$head_version" ]; then
+            echo "ERROR: sensitive paths changed without a VERSION bump." >&2
+            echo "Bump VERSION per RELEASING.md or add [skip-version-check] to PR description." >&2
+            exit 1
+          fi
