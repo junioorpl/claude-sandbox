@@ -1,0 +1,12 @@
+# compose.override.example.yml
+# Copy to compose.override.yml (gitignored) for local-only tweaks.
+# docker-compose picks up compose.override.yml automatically.
+
+services:
+  dev:
+    environment:
+      # Example: expose local tools inside the container
+      DEBUG: "true"
+    # Example: extra volume unique to your setup
+    # volumes:
+    #   - /Users/you/docs:/docs:ro

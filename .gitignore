@@ -21,3 +21,6 @@ npm-debug.log*
 
 # Generated per-org devcontainer overrides
 .devcontainer/.generated/
+
+# Local compose override
+compose.override.yml
