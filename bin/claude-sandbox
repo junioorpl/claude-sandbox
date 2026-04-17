@@ -273,7 +273,7 @@ cmd_doctor() {
     drops="$(dmesg 2>/dev/null | grep 'fw-drop' | tail -5 || true)"
   fi
   if [ -n "$drops" ]; then
-    echo "$drops" | sed 's/^/  /'
+    while IFS= read -r line; do printf '  %s\n' "$line"; done <<< "$drops"
   else
     echo "  (none or log not accessible — add EXTRA_ALLOWED_DOMAINS if expected hosts are blocked)"
   fi
