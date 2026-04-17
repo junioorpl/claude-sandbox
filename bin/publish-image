@@ -1,0 +1,58 @@
+#!/usr/bin/env bash
+# bin/publish-image — flip GHCR package visibility to public.
+# Requires gh CLI authenticated with write:packages scope.
+set -euo pipefail
+
+readonly PACKAGE="claude-sandbox"
+readonly OWNER="junioorpl"
+
+readonly COLOR_GREEN=$'\033[0;32m'
+readonly COLOR_YELLOW=$'\033[0;33m'
+readonly COLOR_RED=$'\033[0;31m'
+readonly COLOR_OFF=$'\033[0m'
+
+log()  { printf '%s[publish-image]%s %s\n' "$COLOR_GREEN" "$COLOR_OFF" "$*"; }
+warn() { printf '%s[publish-image]%s %s\n' "$COLOR_YELLOW" "$COLOR_OFF" "$*" >&2; }
+die()  { printf '%s[publish-image] ERROR:%s %s\n' "$COLOR_RED" "$COLOR_OFF" "$*" >&2; exit 1; }
+
+command -v gh >/dev/null || die "gh CLI not installed"
+gh auth status >/dev/null 2>&1 || die "gh not authenticated — run: gh auth login"
+
+# Check scope
+if ! gh api "/user/packages?package_type=container" >/dev/null 2>&1; then
+  warn "gh token missing read:packages / write:packages scope."
+  warn "Run: gh auth refresh -h github.com -s read:packages,write:packages"
+  warn "Then re-run this script."
+  die "missing scope"
+fi
+
+# Verify package exists
+if ! gh api "/user/packages/container/$PACKAGE" >/dev/null 2>&1; then
+  die "package $OWNER/$PACKAGE not found — has the build-and-push workflow succeeded at least once?"
+fi
+
+# Current visibility
+CURRENT=$(gh api "/user/packages/container/$PACKAGE" --jq .visibility)
+log "current visibility: $CURRENT"
+
+if [ "$CURRENT" = "public" ]; then
+  log "already public. nothing to do."
+  exit 0
+fi
+
+log "flipping to public…"
+gh api --method PATCH \
+  -H "Accept: application/vnd.github+json" \
+  "/user/packages/container/$PACKAGE/visibility" \
+  -f visibility=public >/dev/null
+
+# Verify anonymous pull works
+log "verifying anonymous access…"
+HTTP=$(curl -sL -o /dev/null -w "%{http_code}" \
+  "https://ghcr.io/v2/$OWNER/$PACKAGE/manifests/latest" || echo "000")
+
+if [ "$HTTP" = "200" ]; then
+  log "OK — ghcr.io/$OWNER/$PACKAGE is public."
+else
+  warn "visibility flipped but anonymous manifest GET returned HTTP $HTTP (may need a minute to propagate)."
+fi
