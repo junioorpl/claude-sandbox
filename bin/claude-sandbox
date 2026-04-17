@@ -22,14 +22,23 @@ usage() {
 claude-sandbox — isolated Claude Code dev container per organization.
 
 Usage:
-  claude-sandbox <org>                    Interactive shell, persistent workspace
+  claude-sandbox <org>                    Interactive shell (ephemeral, persistent workspace volume)
+  claude-sandbox <org> up                 Start persistent container (backgrounded)
+  claude-sandbox <org> stop               Stop persistent container
+  claude-sandbox <org> status             Show container + volume state
+  claude-sandbox <org> logs               Stream container logs
+  claude-sandbox <org> ide [code|cursor|codium] [--repo <name>]
+                                          Open the org's container in an IDE
+                                          (auto-detect: cursor → code → codium)
+  claude-sandbox <org> ide-cli            Start container via devcontainer CLI (Zed / headless)
   claude-sandbox <org> throwaway          --rm + anonymous workspace volume
   claude-sandbox <org> agent <name>       Parallel instance (workspace-<org>-<name>)
   claude-sandbox <org> vscode             Generate per-org devcontainer for VS Code
   claude-sandbox --list                   List configured orgs
   claude-sandbox --build                  Rebuild local image
   claude-sandbox upgrade [version]        Upgrade shared Claude CLI volume
-  claude-sandbox doctor                   Diagnose image/volumes/CLI version
+  claude-sandbox pull-image               Pull latest image for the configured IMAGE tag
+  claude-sandbox doctor                   Diagnose image/volumes/CLI version + firewall drops
   claude-sandbox --no-host-mounts <org>   Run without host bind-mounts (hermetic)
   claude-sandbox -h | --help              Show this message
 USAGE
@@ -115,17 +124,159 @@ cmd_upgrade() {
     docker compose run --rm cli-init
 }
 
+cmd_pull_image() {
+  require_docker
+  local image="${IMAGE:-ghcr.io/junioorpl/claude-sandbox:latest}"
+  log "Pulling $image"
+  docker pull "$image"
+}
+
+cmd_up() {
+  require_docker
+  ensure_cli_volume_populated
+  pre_create_host_mounts
+  log "Starting persistent container for org=$ORG"
+  docker compose up -d dev
+  local cid
+  cid="$(docker compose ps -q dev)"
+  log "Container: ${cid:0:12}  (volume: claude-data-${ORG} / workspace-${ORG})"
+  log "Attach a shell:   claude-sandbox $ORG attach"
+  log "Open an IDE:      claude-sandbox $ORG ide"
+  log "Stop:             claude-sandbox $ORG stop"
+}
+
+cmd_stop() {
+  require_docker
+  log "Stopping persistent container for org=$ORG"
+  docker compose stop dev
+}
+
+cmd_status() {
+  require_docker
+  docker compose ps
+}
+
+cmd_logs() {
+  require_docker
+  exec docker compose logs -f dev
+}
+
+cmd_attach() {
+  require_docker
+  local cid
+  cid="$(docker compose ps -q dev 2>/dev/null)"
+  [ -n "$cid" ] || die "no running container for org=$ORG (run: claude-sandbox $ORG up)"
+  exec docker exec -it "$cid" zsh
+}
+
+detect_editor() {
+  local prefer="${1:-auto}"
+  if [ "$prefer" != "auto" ]; then
+    command -v "$prefer" >/dev/null 2>&1 || die "editor '$prefer' not on PATH"
+    echo "$prefer"
+    return 0
+  fi
+  for cand in cursor code codium; do
+    if command -v "$cand" >/dev/null 2>&1; then
+      echo "$cand"
+      return 0
+    fi
+  done
+  die "no supported editor on PATH (cursor, code, codium). Install one or run: claude-sandbox $ORG ide <editor>"
+}
+
+hex_encode() {
+  # Convert stdin to lowercase hex (each byte → 2 hex chars). POSIX-safe via od.
+  od -A n -t x1 | tr -d ' \n'
+}
+
+cmd_ide() {
+  require_docker
+  local editor="auto"
+  local repo=""
+  while [ $# -gt 0 ]; do
+    case "$1" in
+      --repo) shift; repo="${1:-}"; [ -n "$repo" ] || die "--repo needs a value"; shift ;;
+      code|cursor|codium) editor="$1"; shift ;;
+      *) die "unknown arg for ide: $1" ;;
+    esac
+  done
+
+  editor="$(detect_editor "$editor")"
+
+  # Ensure container is running (idempotent — reuses existing).
+  ensure_cli_volume_populated
+  pre_create_host_mounts
+  docker compose up -d dev
+
+  local cid
+  cid="$(docker compose ps -q dev)" || die "container not found after up"
+  [ -n "$cid" ] || die "container not running"
+
+  local target="/workspace"
+  [ -n "$repo" ] && target="/workspace/$repo"
+
+  local hex_id
+  hex_id="$(printf '%s' "$cid" | hex_encode)"
+  local uri="vscode-remote://attached-container+${hex_id}${target}"
+
+  log "Opening $editor → $target (container=${cid:0:12})"
+  # cursor shares VS Code's URI scheme + --folder-uri flag.
+  "$editor" --folder-uri "$uri"
+}
+
+cmd_ide_cli() {
+  require_docker
+  command -v devcontainer >/dev/null 2>&1 || \
+    die "devcontainer CLI not found. Install: npm install -g @devcontainers/cli"
+  generate_vscode_devcontainer "$ORG"
+  local gen_dir="$REPO_ROOT/.devcontainer/.generated/$ORG"
+  pre_create_host_mounts
+  log "Bringing up container via devcontainer CLI (workspace-folder=$gen_dir)"
+  exec devcontainer up --workspace-folder "$gen_dir"
+}
+
 cmd_doctor() {
   require_docker
   local image="${IMAGE:-ghcr.io/junioorpl/claude-sandbox:latest}"
   local node_image="${NODE_IMAGE:-node:20-bookworm}"
+
   log "Image: $image"
   docker image inspect "$image" --format '  {{.Id}} ({{.Created}})' 2>/dev/null || echo "  (not pulled)"
+  local local_version
+  local_version="$(docker image inspect "$image" --format '{{index .Config.Labels "org.opencontainers.image.version"}}' 2>/dev/null || true)"
+  if [ -n "$local_version" ] && [ "$local_version" != "<no value>" ]; then
+    local channel
+    case "${image##*:}" in
+      latest) channel=":latest (auto-bumps)" ;;
+      sha-*)  channel="pinned sha (immutable)" ;;
+      v*.*.*) channel="pinned exact (immutable)" ;;
+      v*.*)   channel="minor channel (auto patches)" ;;
+      v*)     channel="major channel (auto minor+patch)" ;;
+      *)      channel="custom" ;;
+    esac
+    echo "  version: $local_version ($channel)"
+  fi
+
   log "Volumes:"
   docker volume ls --format '{{.Name}}' | grep -E '^(claude-cli-bin|claude-data-|workspace-)' | sed 's/^/  /' || true
+
   log "CLI version in shared volume:"
   docker run --rm -v claude-cli-bin:/opt/claude-cli --entrypoint /opt/claude-cli/bin/claude "$node_image" --version 2>/dev/null \
     || echo "  (not initialized — run: claude-sandbox upgrade)"
+
+  log "Firewall drops (last 5 min, via dmesg):"
+  # kernel log access requires CAP_SYSLOG which the container may not have;
+  # fall back to the refresh log if dmesg is empty.
+  local drops=""
+  if command -v dmesg >/dev/null 2>&1; then
+    drops="$(dmesg 2>/dev/null | grep 'fw-drop' | tail -5 || true)"
+  fi
+  if [ -n "$drops" ]; then
+    echo "$drops" | sed 's/^/  /'
+  else
+    echo "  (none or log not accessible — add EXTRA_ALLOWED_DOMAINS if expected hosts are blocked)"
+  fi
 }
 
 ensure_cli_volume_populated() {
@@ -168,6 +319,7 @@ main() {
     --build) cmd_build; exit 0 ;;
     doctor) cmd_doctor; exit 0 ;;
     upgrade) shift; cmd_upgrade "${1:-latest}"; exit 0 ;;
+    pull-image) cmd_pull_image; exit 0 ;;
     --no-host-mounts) no_host_mounts=1; shift ;;
   esac
 
@@ -187,6 +339,13 @@ main() {
 
   case "$service" in
     dev|throwaway) shift 2>/dev/null || true; run_service "$service" ;;
+    up)     shift || true; cmd_up ;;
+    stop)   shift || true; cmd_stop ;;
+    status) shift || true; cmd_status ;;
+    logs)   shift || true; cmd_logs ;;
+    attach) shift || true; cmd_attach ;;
+    ide)     shift || true; cmd_ide "$@" ;;
+    ide-cli) shift || true; cmd_ide_cli ;;
     agent)
       shift
       local agent_name="${1:-}"
@@ -204,7 +363,7 @@ main() {
       log "VS Code will use .devcontainer/.generated/$org/devcontainer.json"
       exit 0
       ;;
-    *) die "unknown service '$service' (expected: dev|throwaway|agent|vscode)" ;;
+    *) die "unknown service '$service' (expected: dev|throwaway|agent|vscode|up|stop|status|logs|attach|ide|ide-cli)" ;;
   esac
 }
 
