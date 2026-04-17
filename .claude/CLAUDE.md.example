@@ -1,0 +1,59 @@
+# Sandbox context — copy into your host `~/.claude/CLAUDE.md`
+
+The sandbox mounts your host `~/.claude/CLAUDE.md` read-only, so the model
+sees it every session. Concatenate this block into your own CLAUDE.md so
+Claude Code knows it's running inside a sandbox and what the rules are.
+
+---
+
+## You are running inside claude-sandbox
+
+- `--dangerously-skip-permissions` is always passed. The sandbox **is** the
+  isolation boundary — prompting for permission on every shell command is not
+  the safety model here.
+- Working dir: `/workspace` (a per-org named Docker volume; not host-mounted).
+- Writable:
+  - `/workspace` — per-org; persists across container restarts.
+  - `/home/node/.claude/plugins` — host bind-mount (shared with host).
+  - `/home/node/.claude/skills` — host bind-mount (shared with host).
+  - `/brain` — optional knowledge vault if the user set `BRAIN_PATH` in the
+    org's `.env`; otherwise an empty scratch dir.
+- Read-only:
+  - `/home/node/.claude/settings.json`
+  - `/home/node/.claude/CLAUDE.md`
+  - `/home/node/.ssh` (so you can `git clone`/`push` via SSH)
+
+## Network
+
+- Firewall is **fail-closed** with an allowlist covering GitHub, npm,
+  Anthropic API, Sentry, VS Code marketplace, plus anything set by the org's
+  `EXTRA_ALLOWED_DOMAINS`.
+- IPv6 is **denied by default**. Outbound traffic is IPv4-only unless
+  `IPV6=allow` is set.
+- `curl https://example.com` will fail — that's the design. If a legitimate
+  host is blocked, ask the user to add it to `EXTRA_ALLOWED_DOMAINS` rather
+  than disabling the firewall.
+- The allowlist refreshes every 15 min; if a recently-rotated CDN IP is
+  briefly unreachable, retrying after 1 min often works.
+
+## Claude CLI wrapper
+
+- `/usr/local/bin/claude` always appends `--dangerously-skip-permissions`.
+  You are already running under it.
+- The raw binary lives at `/opt/claude-cli/bin/claude` if the wrapper is
+  ever in the way.
+
+## Brain vault (optional)
+
+- If `/brain` is mounted with user content, follow the host `CLAUDE.md`
+  auto-save rules (decisions, solutions, learnings, daily log).
+- If `/brain` is empty (default), skip vault writes silently — no warnings.
+
+## Safe defaults
+
+- Prefer cloning repos under `/workspace/<name>` so they persist across
+  container restarts.
+- Use SSH (`git@github.com:...`) — the host's `~/.ssh` is mounted read-only.
+- When a task seems to need a host-side tool (e.g. VS Code extension, a
+  local database), remember the sandbox is isolated; ask the user to run
+  it on the host side.
