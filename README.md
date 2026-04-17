@@ -127,6 +127,66 @@ gh auth refresh -h github.com -s read:packages,write:packages
 ./bin/publish-image
 ```
 
+## Roadmap
+
+Feature tracker. Items get ticked off when shipped. File an issue to propose additions or change priority.
+
+### Fork-safety + supply chain
+- [ ] SHA256-pinned git-delta install (no silent tamper)
+- [ ] Vendored zsh-in-docker install script (no remote `curl | sh`)
+- [ ] Optional brain vault mount via `BRAIN_PATH` env (fork-portable)
+- [ ] Fork-safe CI image tags via `${{ github.repository_owner }}`
+- [ ] Fail-loud bootstrap: container exits on repo-clone failure
+- [ ] All GitHub Actions pinned by commit SHA
+- [ ] Base image (`node`) pinned by digest with Dependabot bumps
+- [ ] `.dockerignore` + `.editorconfig` + `CONTRIBUTING.md` + `SECURITY.md`
+
+### Versioning + release discipline
+- [ ] `VERSION` file drives semver tags (`:v1`, `:v1.2`, `:v1.2.3`, `:latest`, `:sha-<sha>`)
+- [ ] Breaking-change gate in CI (refuses merge without `VERSION` bump on firewall/compose/launcher edits)
+- [ ] `RELEASING.md` with semver rules
+- [ ] Launcher warns when local image lags upstream by a major version
+- [ ] `IMAGE` env var lets consumers pin any channel
+
+### Firewall hardening
+- [ ] Multi-A record capture for CDN-fronted hosts
+- [ ] Explicit IPv6 policy (default deny, `IPV6=allow` escape hatch)
+- [ ] Periodic allowlist refresh (15 min default)
+- [ ] Rate-limited drop log + `doctor` surfaces recent drops
+
+### IDE integration
+- [ ] Persistent container lifecycle: `up`, `stop`, `status`, `logs`
+- [ ] `./bin/claude-sandbox <org> ide [code|cursor|codium]` — one-command attach
+- [ ] `--repo <name>` opens directly inside a cloned subrepo
+- [ ] `ide-cli` wrapper around `devcontainer up` (Zed + headless)
+- [ ] JetBrains Gateway via opt-in `ENABLE_SSHD=1` (pubkey-only, localhost-bound)
+
+### Claude Code ergonomics
+- [ ] `.claude/settings.json.example` with sandbox-friendly defaults
+- [ ] `.claude/CLAUDE.md.example` baseline (firewall, mounts, brain)
+- [ ] MCP sidecar pattern in `compose.override.example.yml`
+- [ ] README "Claude Code integration" section (mount map, RO vs RW rationale, hooks caveat)
+
+### Testing
+- [ ] Cross-org isolation regression suite (`tests/isolation.bats`)
+- [ ] Firewall: multi-A, IPv6 deny, refresh idempotency, malformed CIDR
+- [ ] Launcher error paths: corrupt `.env`, malformed `REPOS`, missing docker socket
+- [ ] `integration.sh` two-org swap + soak-test gate
+- [ ] CI runs expanded tests on PRs touching `.devcontainer/` or compose
+
+### Compose + maintainability
+- [ ] Volume mount anchors (reduce duplication across `dev`/`throwaway`/`agent`)
+- [ ] `NODE_IMAGE` build arg shared between Dockerfile + `cli-init`
+- [ ] Healthchecks on `dev`/`throwaway`/`agent` (`iptables allowlist` + CLI binary present)
+
+### Docs
+- [ ] README "Firewall" section explains algorithm + refresh + verification
+- [ ] README "Brain vault" section documents opt-in + blast radius
+- [ ] README "Upgrade policy" section (link to RELEASING.md)
+- [ ] `UPSTREAM.md` — resync procedure from anthropics/claude-code/.devcontainer
+- [ ] `compose.override.example.yml` worked example in README
+- [ ] `docs/INDEX.md` — map of design + plan docs
+
 ## License
 
 MIT — see [LICENSE](./LICENSE).
