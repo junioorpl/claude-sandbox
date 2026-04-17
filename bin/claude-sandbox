@@ -7,7 +7,6 @@ REPO_ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 cd "$REPO_ROOT"
 
 readonly ORGS_DIR="$REPO_ROOT/orgs"
-readonly COMPOSE_PROJECT="claude-sandbox"
 
 readonly COLOR_RED=$'\033[0;31m'
 readonly COLOR_YELLOW=$'\033[0;33m'
@@ -52,8 +51,10 @@ load_org_env() {
   local org="$1"
   local env_file="$ORGS_DIR/$org/.env"
   [ -f "$env_file" ] || die "missing $env_file — create it from .env.example first"
-  # shellcheck disable=SC1090
-  set -a; source "$env_file"; set +a
+  set -a
+  # shellcheck source=/dev/null
+  source "$env_file"
+  set +a
   export ORG="$org"
 }
 
