@@ -48,12 +48,14 @@ if grep -q "$begin_marker" "$rc_file"; then
   log "updating existing alias block in $rc_file"
   # Remove old block, then append new one.
   tmp="$(mktemp)"
+  trap 'rm -f "$tmp"' EXIT
   awk -v begin="$begin_marker" -v end="$end_marker" '
     $0==begin {skip=1; next}
     $0==end   {skip=0; next}
     !skip
   ' "$rc_file" > "$tmp"
   mv "$tmp" "$rc_file"
+  trap - EXIT
 else
   log "appending alias block to $rc_file"
 fi

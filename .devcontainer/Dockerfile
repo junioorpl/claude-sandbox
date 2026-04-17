@@ -1,7 +1,8 @@
 # Forked from anthropics/claude-code/.devcontainer/Dockerfile
 # See .devcontainer/UPSTREAM.md for drift log and upstream SHA.
 
-FROM node:20
+ARG NODE_IMAGE=node:20-bookworm
+FROM ${NODE_IMAGE}
 
 ARG TZ
 ENV TZ="$TZ"
@@ -52,9 +53,17 @@ RUN mkdir -p /workspace /home/node/.claude /home/node/.claude/plugins \
 WORKDIR /workspace
 
 ARG GIT_DELTA_VERSION=0.18.2
+ARG GIT_DELTA_SHA256_AMD64=1658c7b61825d411b50734f34016101309e4b6e7f5799944cf8e4ac542cebd7f
+ARG GIT_DELTA_SHA256_ARM64=937781aa7788e1510858743fff6c9a8b4a69fe0a22a7c8a69493e633227939a9
 RUN ARCH=$(dpkg --print-architecture) && \
-  wget "https://github.com/dandavison/delta/releases/download/${GIT_DELTA_VERSION}/git-delta_${GIT_DELTA_VERSION}_${ARCH}.deb" && \
-  sudo dpkg -i "git-delta_${GIT_DELTA_VERSION}_${ARCH}.deb" && \
+  case "$ARCH" in \
+    amd64) EXPECTED="$GIT_DELTA_SHA256_AMD64" ;; \
+    arm64) EXPECTED="$GIT_DELTA_SHA256_ARM64" ;; \
+    *) echo "unsupported arch for git-delta: $ARCH" >&2; exit 1 ;; \
+  esac && \
+  wget -q "https://github.com/dandavison/delta/releases/download/${GIT_DELTA_VERSION}/git-delta_${GIT_DELTA_VERSION}_${ARCH}.deb" && \
+  echo "$EXPECTED  git-delta_${GIT_DELTA_VERSION}_${ARCH}.deb" | sha256sum -c - && \
+  dpkg -i "git-delta_${GIT_DELTA_VERSION}_${ARCH}.deb" && \
   rm "git-delta_${GIT_DELTA_VERSION}_${ARCH}.deb"
 
 USER node
@@ -68,13 +77,17 @@ ENV EDITOR=nano
 ENV VISUAL=nano
 
 ARG ZSH_IN_DOCKER_VERSION=1.2.0
-RUN sh -c "$(wget -O- https://github.com/deluan/zsh-in-docker/releases/download/v${ZSH_IN_DOCKER_VERSION}/zsh-in-docker.sh)" -- \
-  -p git \
-  -p fzf \
-  -a "source /usr/share/doc/fzf/examples/key-bindings.zsh" \
-  -a "source /usr/share/doc/fzf/examples/completion.zsh" \
-  -a "export PROMPT_COMMAND='history -a' && export HISTFILE=/commandhistory/.bash_history" \
-  -x
+ARG ZSH_IN_DOCKER_SHA256=f74e5b08c295b6c3886654bb63c688e5ea16c58a4209435c4ddbab2c42fe9b41
+COPY --chown=node:node zsh-in-docker.sh /tmp/zsh-in-docker.sh
+RUN echo "$ZSH_IN_DOCKER_SHA256  /tmp/zsh-in-docker.sh" | sha256sum -c - && \
+  sh /tmp/zsh-in-docker.sh \
+    -p git \
+    -p fzf \
+    -a "source /usr/share/doc/fzf/examples/key-bindings.zsh" \
+    -a "source /usr/share/doc/fzf/examples/completion.zsh" \
+    -a "export PROMPT_COMMAND='history -a' && export HISTFILE=/commandhistory/.bash_history" \
+    -x && \
+  rm /tmp/zsh-in-docker.sh
 
 # NOTE: Claude CLI install deliberately NOT here. See docs/superpowers/specs/
 # for the live-upgrade design. Launcher populates /opt/claude-cli on first run.

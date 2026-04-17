@@ -63,9 +63,19 @@ pre_create_host_mounts() {
   mkdir -p "$HOME/.claude/plugins" "$HOME/.claude/skills"
   [ -f "$HOME/.claude/settings.json" ] || echo '{}' > "$HOME/.claude/settings.json"
   [ -f "$HOME/.claude/CLAUDE.md" ] || touch "$HOME/.claude/CLAUDE.md"
-  if [ ! -d "$HOME/cabral-dev/brain" ]; then
-    warn "brain vault not found at \$HOME/cabral-dev/brain — /brain mount will fail. Use --no-host-mounts to skip."
+
+  # Brain vault is optional. If BRAIN_PATH is unset/empty or points to a
+  # missing dir, fall back to a shared empty dir so the compose mount always
+  # has a valid source without requiring a personal path in the shared config.
+  local empty_brain="$HOME/.claude-sandbox/empty-brain"
+  mkdir -p "$empty_brain"
+  if [ -z "${BRAIN_PATH:-}" ]; then
+    export BRAIN_PATH="$empty_brain"
+  elif [ ! -d "$BRAIN_PATH" ]; then
+    warn "BRAIN_PATH=$BRAIN_PATH is not a directory — falling back to empty /brain mount"
+    export BRAIN_PATH="$empty_brain"
   fi
+
   if [ ! -d "$HOME/.ssh" ]; then
     warn "no \$HOME/.ssh directory — git SSH clones inside container will fail. Use HTTPS URLs or --no-host-mounts."
   fi
@@ -92,7 +102,9 @@ cmd_list() {
 cmd_build() {
   require_docker
   log "Building image locally…"
-  ORG="__build__" docker compose build dev
+  # Compose parses the whole file at build-time and resolves `${VAR:?}`,
+  # so BRAIN_PATH must be set even for the dev service's build step.
+  ORG="__build__" BRAIN_PATH="${BRAIN_PATH:-/tmp}" docker compose build dev
 }
 
 cmd_upgrade() {
@@ -105,18 +117,21 @@ cmd_upgrade() {
 
 cmd_doctor() {
   require_docker
-  log "Image:"
-  docker image inspect ghcr.io/junioorpl/claude-sandbox:latest --format '  {{.Id}} ({{.Created}})' 2>/dev/null || echo "  (not pulled)"
+  local image="${IMAGE:-ghcr.io/junioorpl/claude-sandbox:latest}"
+  local node_image="${NODE_IMAGE:-node:20-bookworm}"
+  log "Image: $image"
+  docker image inspect "$image" --format '  {{.Id}} ({{.Created}})' 2>/dev/null || echo "  (not pulled)"
   log "Volumes:"
   docker volume ls --format '{{.Name}}' | grep -E '^(claude-cli-bin|claude-data-|workspace-)' | sed 's/^/  /' || true
   log "CLI version in shared volume:"
-  docker run --rm -v claude-cli-bin:/opt/claude-cli --entrypoint /opt/claude-cli/bin/claude node:20 --version 2>/dev/null \
+  docker run --rm -v claude-cli-bin:/opt/claude-cli --entrypoint /opt/claude-cli/bin/claude "$node_image" --version 2>/dev/null \
     || echo "  (not initialized — run: claude-sandbox upgrade)"
 }
 
 ensure_cli_volume_populated() {
   require_docker
-  if ! docker run --rm -v claude-cli-bin:/opt/claude-cli node:20 test -x /opt/claude-cli/bin/claude 2>/dev/null; then
+  local node_image="${NODE_IMAGE:-node:20-bookworm}"
+  if ! docker run --rm -v claude-cli-bin:/opt/claude-cli "$node_image" test -x /opt/claude-cli/bin/claude 2>/dev/null; then
     log "First-time setup: populating claude-cli-bin volume with latest CLI"
     cmd_upgrade latest
   fi

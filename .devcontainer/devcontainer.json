@@ -44,7 +44,7 @@
     "source=${localEnv:HOME}/.claude/skills,target=/home/node/.claude/skills,type=bind",
     "source=${localEnv:HOME}/.claude/settings.json,target=/home/node/.claude/settings.json,type=bind,readonly",
     "source=${localEnv:HOME}/.claude/CLAUDE.md,target=/home/node/.claude/CLAUDE.md,type=bind,readonly",
-    "source=${localEnv:HOME}/cabral-dev/brain,target=/brain,type=bind",
+    "source=${localEnv:BRAIN_PATH:${localEnv:HOME}/.claude-sandbox/empty-brain},target=/brain,type=bind",
     "source=${localEnv:HOME}/.ssh,target=/home/node/.ssh,type=bind,readonly"
   ],
   "containerEnv": {
