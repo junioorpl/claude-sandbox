@@ -4,10 +4,6 @@ Portable, per-organization isolated Docker environment for running [Claude Code]
 
 Fork of Anthropic's reference devcontainer, wrapped with a per-org launcher, Docker Compose services, and a shared Claude CLI volume that supports hot upgrades without rebuilding images or restarting containers.
 
-## Status
-
-Design phase. See [design spec](./docs/superpowers/specs/2026-04-17-claude-dev-sandbox-design.md). Implementation plan coming next.
-
 ## Why
 
 - **`--dangerously-skip-permissions` without risk** — container isolation + firewall allowlist
@@ -18,30 +14,83 @@ Design phase. See [design spec](./docs/superpowers/specs/2026-04-17-claude-dev-s
 
 ## Quick start
 
-> Coming with the implementation. See the [design spec](./docs/superpowers/specs/2026-04-17-claude-dev-sandbox-design.md) for the current plan.
+1. Prerequisites: Docker Desktop 4.30+ (or Docker Engine 24+) with `docker compose`.
+2. Clone and set up:
+
+   ```bash
+   git clone git@github.com:junioorpl/claude-sandbox.git ~/claude-sandbox
+   cd ~/claude-sandbox
+   mkdir -p orgs/personal
+   cp .env.example orgs/personal/.env
+   $EDITOR orgs/personal/.env       # set GIT_USER_NAME, GIT_USER_EMAIL
+   ```
+
+3. Launch:
+
+   ```bash
+   ./bin/claude-sandbox personal
+   ```
+
+   First run populates the shared Claude CLI volume (~30s) and pulls the image from GHCR.
+
+4. Inside the container:
+
+   ```bash
+   git clone git@github.com:you/your-repo.git
+   cd your-repo
+   claude --dangerously-skip-permissions
+   ```
+
+## Common tasks
 
 ```bash
-git clone git@github.com:junioorpl/claude-sandbox.git ~/claude-sandbox
-cd ~/claude-sandbox
-cp .env.example orgs/personal/.env && $EDITOR orgs/personal/.env
-./bin/claude-sandbox personal
-# inside container:
-git clone <your-repo>
-cd <your-repo>
-claude --dangerously-skip-permissions
+./bin/claude-sandbox --list                   # list configured orgs
+./bin/claude-sandbox upgrade                  # bump CLI to latest (no restart)
+./bin/claude-sandbox upgrade 1.2.3            # pin to a version
+./bin/claude-sandbox <org> throwaway          # ephemeral workspace
+./bin/claude-sandbox <org> agent worker-1     # parallel named instance
+./bin/claude-sandbox <org> vscode             # generate per-org devcontainer for VS Code
+./bin/claude-sandbox doctor                   # diagnostics
+./bin/claude-sandbox --no-host-mounts <org>   # hermetic run — no host bleed-through
 ```
+
+## Multi-organization usage
+
+Create `orgs/<name>/.env` for each organization:
+
+```bash
+mkdir -p orgs/acme
+cp .env.example orgs/acme/.env
+$EDITOR orgs/acme/.env   # set acme-specific git identity, EXTRA_ALLOWED_DOMAINS, etc.
+./bin/claude-sandbox acme
+```
+
+Each org gets dedicated Docker volumes (`claude-data-<org>`, `workspace-<org>`). A container launched with `ORG=acme` cannot access `ORG=personal` volumes.
 
 ## Architecture
 
-See [`docs/superpowers/specs/`](./docs/superpowers/specs/) for the full design document.
+See [`docs/superpowers/specs/`](./docs/superpowers/specs/) for the full design document and [`docs/superpowers/plans/`](./docs/superpowers/plans/) for the KERNEL-format implementation plan.
 
 High-level:
 
-- **Base image**: fork of `anthropics/claude-code/.devcontainer` — Node 20 slim, firewall allowlist, git, zsh, fzf
-- **Per-org named volumes**: `claude-data-<org>`, `workspace-<org>`
-- **Shared host bind-mounts**: plugins, skills, settings, CLAUDE.md, Obsidian vault (optional)
-- **Shared CLI volume**: `claude-cli-bin` — live-upgradeable without container restart
+- **Base image**: fork of `anthropics/claude-code/.devcontainer` — Node 20, firewall allowlist, git, zsh, fzf
+- **Per-org named volumes**: `claude-data-<org>` (at `/home/node/.claude`), `workspace-<org>`
+- **Shared host bind-mounts**: `~/.claude/plugins`, `~/.claude/skills`, `settings.json`, `CLAUDE.md`, Obsidian brain vault
+- **Shared CLI volume**: `claude-cli-bin` at `/opt/claude-cli` — live-upgradeable without container restart
 - **Launcher**: `bin/claude-sandbox <org>` drops you into an interactive shell with the right context
+
+## Security model
+
+| Control | Default | Override |
+|---|---|---|
+| Outbound firewall | **on** — allowlist of npm, GitHub, Anthropic API, Sentry, VS Code marketplace | `FIREWALL=off` in `orgs/<org>/.env` |
+| Extra allowed domains | none | `EXTRA_ALLOWED_DOMAINS="host1 host2"` |
+| Host filesystem | no arbitrary bind-mounts; user home is **not** exposed | N/A |
+| Host Claude config | `~/.claude/plugins` and `~/.claude/skills` **rw**; `settings.json` and `CLAUDE.md` **ro**; `keybindings.json` intentionally not mounted | `--no-host-mounts` disables all host bind-mounts |
+| Brain vault | RW-mounted at `/brain` on all orgs | `--no-host-mounts` |
+| Credentials | per-org volume (`claude-data-<org>`); never shared | N/A |
+
+Running `claude --dangerously-skip-permissions` is safe **only** when the firewall is on and you trust the repository you've cloned. See [Anthropic's devcontainer guidance](https://code.claude.com/docs/en/devcontainer) for context.
 
 ## License
 
