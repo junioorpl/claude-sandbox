@@ -24,13 +24,23 @@ x-base-service: &base-service
     GH_TOKEN: ${GH_TOKEN:-}
     GIT_USER_NAME: ${GIT_USER_NAME:-}
     GIT_USER_EMAIL: ${GIT_USER_EMAIL:-}
+    REPOS: ${REPOS:-}
     ORG: ${ORG:?ORG must be set — use bin/claude-sandbox <org>}
   entrypoint: ["/bin/bash", "-c"]
   command:
     - |
-      sudo /usr/local/bin/init-firewall-wrapper.sh && \
-      if [ -n "$$GIT_USER_NAME" ]; then git config --global user.name "$$GIT_USER_NAME"; fi && \
-      if [ -n "$$GIT_USER_EMAIL" ]; then git config --global user.email "$$GIT_USER_EMAIL"; fi && \
+      sudo /usr/local/bin/init-firewall-wrapper.sh
+      if [ -n "$$GIT_USER_NAME" ]; then git config --global user.name "$$GIT_USER_NAME"; fi
+      if [ -n "$$GIT_USER_EMAIL" ]; then git config --global user.email "$$GIT_USER_EMAIL"; fi
+      if [ -n "$$REPOS" ]; then
+        for url in $$REPOS; do
+          name=$$(basename -s .git "$$url")
+          if [ ! -d "/workspace/$$name" ]; then
+            echo "[bootstrap] cloning $$url"
+            git clone "$$url" "/workspace/$$name" || echo "[bootstrap] WARN failed to clone $$url"
+          fi
+        done
+      fi
       exec zsh
 
 services:
@@ -47,6 +57,7 @@ services:
       - ${HOME}/.claude/settings.json:/home/node/.claude/settings.json:ro
       - ${HOME}/.claude/CLAUDE.md:/home/node/.claude/CLAUDE.md:ro
       - ${HOME}/cabral-dev/brain:/brain
+      - ${HOME}/.ssh:/home/node/.ssh:ro
 
   throwaway:
     <<: *base-service
@@ -59,6 +70,7 @@ services:
       - ${HOME}/.claude/settings.json:/home/node/.claude/settings.json:ro
       - ${HOME}/.claude/CLAUDE.md:/home/node/.claude/CLAUDE.md:ro
       - ${HOME}/cabral-dev/brain:/brain
+      - ${HOME}/.ssh:/home/node/.ssh:ro
 
   agent:
     <<: *base-service
@@ -72,6 +84,7 @@ services:
       - ${HOME}/.claude/settings.json:/home/node/.claude/settings.json:ro
       - ${HOME}/.claude/CLAUDE.md:/home/node/.claude/CLAUDE.md:ro
       - ${HOME}/cabral-dev/brain:/brain
+      - ${HOME}/.ssh:/home/node/.ssh:ro
 
   # Hermetic variant of dev — no host bind-mounts.
   dev-hermetic:

@@ -66,6 +66,9 @@ pre_create_host_mounts() {
   if [ ! -d "$HOME/cabral-dev/brain" ]; then
     warn "brain vault not found at \$HOME/cabral-dev/brain — /brain mount will fail. Use --no-host-mounts to skip."
   fi
+  if [ ! -d "$HOME/.ssh" ]; then
+    warn "no \$HOME/.ssh directory — git SSH clones inside container will fail. Use HTTPS URLs or --no-host-mounts."
+  fi
 }
 
 cmd_list() {
