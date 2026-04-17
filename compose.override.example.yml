@@ -7,6 +7,34 @@ services:
     environment:
       # Example: expose local tools inside the container
       DEBUG: "true"
+
     # Example: extra volume unique to your setup
     # volumes:
-    #   - /Users/you/docs:/docs:ro
+    #   - ${HOME}/docs:/docs:ro
+
+    # Example: allow IPv6 explicitly (firewall denies by default)
+    # environment:
+    #   IPV6: allow
+
+    # Example: tighter refresh interval for the firewall allowlist
+    # environment:
+    #   FIREWALL_REFRESH_INTERVAL: "300"
+
+  # ---------------------------------------------------------------------
+  # Example: attach an MCP (Model Context Protocol) sidecar.
+  # The firewall denies container-to-container traffic by default; add the
+  # sidecar's hostname to EXTRA_ALLOWED_DOMAINS in orgs/<org>/.env so
+  # `mcp-github` is reachable from the dev container.
+  # ---------------------------------------------------------------------
+  # mcp-github:
+  #   image: ghcr.io/anthropics/mcp-server-github:latest
+  #   environment:
+  #     GITHUB_PERSONAL_ACCESS_TOKEN: ${GH_TOKEN}
+  #   networks:
+  #     - default
+
+  # ---------------------------------------------------------------------
+  # Example: point dev at a sidecar MCP via Claude's CLAUDE_MCP_SERVERS env.
+  # ---------------------------------------------------------------------
+  #   environment:
+  #     CLAUDE_MCP_SERVERS: '{"github":{"url":"http://mcp-github:8080"}}'
