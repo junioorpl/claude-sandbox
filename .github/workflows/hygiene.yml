@@ -1,0 +1,27 @@
+name: hygiene
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+jobs:
+  gitignore-check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Ensure no orgs/*/.env committed
+        run: |
+          set -e
+          if git ls-files 'orgs/*/.env' | grep .; then
+            echo "ERROR: orgs/*/.env files are committed" >&2
+            exit 1
+          fi
+
+  shell-lint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: sudo apt-get update && sudo apt-get install -y shellcheck bats
+      - run: shellcheck bin/claude-sandbox .devcontainer/init-firewall-wrapper.sh
+      - run: bats tests/launcher.bats tests/firewall.bats
