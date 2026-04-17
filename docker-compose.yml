@@ -3,6 +3,28 @@
 
 name: claude-sandbox
 
+# ---------------------------------------------------------------------------
+# Mount anchors. YAML scalar anchors let us define each mount string once
+# and reference it by alias in every service that needs it. Compose's list
+# merge semantics don't splat a list anchor into a parent list, but scalar
+# aliases work: a change to the path happens in one place.
+# Named-volume mounts come FIRST in each service (so host bind-mounts can
+# shadow subpaths without being overridden by the named volume).
+# ---------------------------------------------------------------------------
+x-m-claude-data:   &m-claude-data   "claude-data:/home/node/.claude"
+x-m-cli-bin:       &m-cli-bin       "claude-cli-bin:/opt/claude-cli"
+x-m-workspace:     &m-workspace     "workspace:/workspace"
+x-m-workspace-agent: &m-workspace-agent "workspace-agent:/workspace"
+x-m-plugins:       &m-plugins       "${HOME}/.claude/plugins:/home/node/.claude/plugins"
+x-m-skills:        &m-skills        "${HOME}/.claude/skills:/home/node/.claude/skills"
+x-m-settings:      &m-settings      "${HOME}/.claude/settings.json:/home/node/.claude/settings.json:ro"
+x-m-claude-md:     &m-claude-md     "${HOME}/.claude/CLAUDE.md:/home/node/.claude/CLAUDE.md:ro"
+# Brain vault mount — opt-in. Set BRAIN_PATH in orgs/<org>/.env to mount an
+# external knowledge directory (e.g., Obsidian vault) at /brain. When unset,
+# launcher substitutes an empty scratch dir so this mount always resolves.
+x-m-brain:         &m-brain         "${BRAIN_PATH:?BRAIN_PATH must be set — launcher sets a default if not provided in .env}:/brain"
+x-m-ssh:           &m-ssh           "${HOME}/.ssh:/home/node/.ssh:ro"
+
 x-base-service: &base-service
   # Override via IMAGE env (set in orgs/<org>/.env or shell) to pull from a fork's GHCR.
   image: ${IMAGE:-ghcr.io/junioorpl/claude-sandbox:latest}
@@ -29,6 +51,8 @@ x-base-service: &base-service
     CLAUDE_CONFIG_DIR: /home/node/.claude
     POWERLEVEL9K_DISABLE_GITSTATUS: "true"
     FIREWALL: ${FIREWALL:-on}
+    FIREWALL_REFRESH_INTERVAL: ${FIREWALL_REFRESH_INTERVAL:-900}
+    IPV6: ${IPV6:-deny}
     EXTRA_ALLOWED_DOMAINS: ${EXTRA_ALLOWED_DOMAINS:-}
     GH_TOKEN: ${GH_TOKEN:-}
     GIT_USER_NAME: ${GIT_USER_NAME:-}
@@ -38,7 +62,7 @@ x-base-service: &base-service
   entrypoint: ["/bin/bash", "-c"]
   command:
     - |
-      sudo --preserve-env=FIREWALL,EXTRA_ALLOWED_DOMAINS,GH_TOKEN /usr/local/bin/init-firewall-wrapper.sh
+      sudo --preserve-env=FIREWALL,FIREWALL_REFRESH_INTERVAL,IPV6,EXTRA_ALLOWED_DOMAINS,GH_TOKEN /usr/local/bin/init-firewall-wrapper.sh
       if [ -n "$$GIT_USER_NAME" ]; then git config --global user.name "$$GIT_USER_NAME"; fi
       if [ -n "$$GIT_USER_EMAIL" ]; then git config --global user.email "$$GIT_USER_EMAIL"; fi
       if [ -n "$$REPOS" ]; then
@@ -64,62 +88,50 @@ services:
   dev:
     <<: *base-service
     volumes:
-      - claude-data:/home/node/.claude
-      - claude-cli-bin:/opt/claude-cli
-      - workspace:/workspace
-      - ${HOME}/.claude/plugins:/home/node/.claude/plugins
-      - ${HOME}/.claude/skills:/home/node/.claude/skills
-      - ${HOME}/.claude/settings.json:/home/node/.claude/settings.json:ro
-      - ${HOME}/.claude/CLAUDE.md:/home/node/.claude/CLAUDE.md:ro
-      # Brain vault mount — opt-in. Set BRAIN_PATH in orgs/<org>/.env to
-      # mount an external knowledge directory (e.g., Obsidian vault) at /brain.
-      # When unset, launcher substitutes an empty scratch dir so the mount
-      # always exists without requiring a personal path in this shared config.
-      - ${BRAIN_PATH:?BRAIN_PATH must be set — launcher sets a default if not provided in .env}:/brain
-      - ${HOME}/.ssh:/home/node/.ssh:ro
+      - *m-claude-data
+      - *m-cli-bin
+      - *m-workspace
+      - *m-plugins
+      - *m-skills
+      - *m-settings
+      - *m-claude-md
+      - *m-brain
+      - *m-ssh
 
   throwaway:
     <<: *base-service
     volumes:
-      - claude-data:/home/node/.claude
-      - claude-cli-bin:/opt/claude-cli
+      - *m-claude-data
+      - *m-cli-bin
       # No named workspace volume — anonymous, discarded with --rm
-      - ${HOME}/.claude/plugins:/home/node/.claude/plugins
-      - ${HOME}/.claude/skills:/home/node/.claude/skills
-      - ${HOME}/.claude/settings.json:/home/node/.claude/settings.json:ro
-      - ${HOME}/.claude/CLAUDE.md:/home/node/.claude/CLAUDE.md:ro
-      # Brain vault mount — opt-in. Set BRAIN_PATH in orgs/<org>/.env to
-      # mount an external knowledge directory (e.g., Obsidian vault) at /brain.
-      # When unset, launcher substitutes an empty scratch dir so the mount
-      # always exists without requiring a personal path in this shared config.
-      - ${BRAIN_PATH:?BRAIN_PATH must be set — launcher sets a default if not provided in .env}:/brain
-      - ${HOME}/.ssh:/home/node/.ssh:ro
+      - *m-plugins
+      - *m-skills
+      - *m-settings
+      - *m-claude-md
+      - *m-brain
+      - *m-ssh
 
   agent:
     <<: *base-service
     profiles: [agent]
     volumes:
-      - claude-data:/home/node/.claude
-      - claude-cli-bin:/opt/claude-cli
-      - workspace-agent:/workspace
-      - ${HOME}/.claude/plugins:/home/node/.claude/plugins
-      - ${HOME}/.claude/skills:/home/node/.claude/skills
-      - ${HOME}/.claude/settings.json:/home/node/.claude/settings.json:ro
-      - ${HOME}/.claude/CLAUDE.md:/home/node/.claude/CLAUDE.md:ro
-      # Brain vault mount — opt-in. Set BRAIN_PATH in orgs/<org>/.env to
-      # mount an external knowledge directory (e.g., Obsidian vault) at /brain.
-      # When unset, launcher substitutes an empty scratch dir so the mount
-      # always exists without requiring a personal path in this shared config.
-      - ${BRAIN_PATH:?BRAIN_PATH must be set — launcher sets a default if not provided in .env}:/brain
-      - ${HOME}/.ssh:/home/node/.ssh:ro
+      - *m-claude-data
+      - *m-cli-bin
+      - *m-workspace-agent
+      - *m-plugins
+      - *m-skills
+      - *m-settings
+      - *m-claude-md
+      - *m-brain
+      - *m-ssh
 
   # Hermetic variant of dev — no host bind-mounts.
   dev-hermetic:
     <<: *base-service
     volumes:
-      - claude-data:/home/node/.claude
-      - claude-cli-bin:/opt/claude-cli
-      - workspace:/workspace
+      - *m-claude-data
+      - *m-cli-bin
+      - *m-workspace
 
   # One-shot CLI installer/upgrader for the shared volume.
   # Invoked by launcher: docker compose run --rm cli-init
@@ -129,7 +141,7 @@ services:
     image: ${NODE_IMAGE:-node:20-bookworm}
     user: "0:0"
     volumes:
-      - claude-cli-bin:/opt/claude-cli
+      - *m-cli-bin
     environment:
       CLAUDE_CLI_VERSION: ${CLAUDE_CLI_VERSION:-latest}
     entrypoint: ["/bin/bash", "-c"]
