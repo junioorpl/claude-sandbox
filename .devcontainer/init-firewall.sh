@@ -40,16 +40,32 @@ iptables -A OUTPUT -o lo -j ACCEPT
 # Create ipset with CIDR support
 ipset create allowed-domains hash:net
 
-# Fetch GitHub meta information and aggregate + add their IP ranges
+# Fetch GitHub meta information and aggregate + add their IP ranges.
+# Uses GH_TOKEN (from per-org env) when available to avoid anonymous rate limits.
+# Retries up to 3 times on transient failures.
 echo "Fetching GitHub IP ranges..."
-gh_ranges=$(curl -s https://api.github.com/meta)
-if [ -z "$gh_ranges" ]; then
-    echo "ERROR: Failed to fetch GitHub IP ranges"
-    exit 1
+auth_header=()
+if [ -n "${GH_TOKEN:-}" ]; then
+    auth_header=(-H "Authorization: Bearer $GH_TOKEN")
 fi
 
-if ! echo "$gh_ranges" | jq -e '.web and .api and .git' >/dev/null; then
-    echo "ERROR: GitHub API response missing required fields"
+gh_ranges=""
+for attempt in 1 2 3; do
+    gh_ranges=$(curl -sSL --max-time 10 "${auth_header[@]}" \
+        -H "Accept: application/vnd.github+json" \
+        -H "User-Agent: claude-sandbox" \
+        https://api.github.com/meta) || gh_ranges=""
+    if echo "$gh_ranges" | jq -e '.web and .api and .git' >/dev/null 2>&1; then
+        break
+    fi
+    echo "attempt $attempt: GitHub meta fetch failed or missing fields; retrying..."
+    echo "  response head: $(echo "$gh_ranges" | head -c 200)"
+    sleep $((attempt * 2))
+    gh_ranges=""
+done
+
+if [ -z "$gh_ranges" ]; then
+    echo "ERROR: GitHub meta fetch failed after retries (hint: set GH_TOKEN in orgs/<org>/.env to avoid rate limits)"
     exit 1
 fi
 

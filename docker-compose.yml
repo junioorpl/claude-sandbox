@@ -29,7 +29,7 @@ x-base-service: &base-service
   entrypoint: ["/bin/bash", "-c"]
   command:
     - |
-      sudo /usr/local/bin/init-firewall-wrapper.sh
+      sudo --preserve-env=FIREWALL,EXTRA_ALLOWED_DOMAINS,GH_TOKEN /usr/local/bin/init-firewall-wrapper.sh
       if [ -n "$$GIT_USER_NAME" ]; then git config --global user.name "$$GIT_USER_NAME"; fi
       if [ -n "$$GIT_USER_EMAIL" ]; then git config --global user.email "$$GIT_USER_EMAIL"; fi
       if [ -n "$$REPOS" ]; then
