@@ -47,8 +47,12 @@ After the alias is installed (and `source ~/.zshrc` / new terminal), you can run
    ```bash
    git clone git@github.com:you/your-repo.git
    cd your-repo
-   claude --dangerously-skip-permissions
+   claude                  # already runs with --dangerously-skip-permissions
    ```
+
+   The sandbox **is** the isolation boundary, so `claude` inside any container
+   is a wrapper that always passes `--dangerously-skip-permissions`. Call
+   `/opt/claude-cli/bin/claude` if you ever need the raw CLI.
 
 ## Common tasks
 
@@ -102,8 +106,9 @@ High-level:
 
 | Control | Default | Override |
 |---|---|---|
-| Outbound firewall | **on** — allowlist of npm, GitHub, Anthropic API, Sentry, VS Code marketplace | `FIREWALL=off` in `orgs/<org>/.env` |
+| Outbound firewall | **on** — allowlist of npm, GitHub, Anthropic API, Sentry, VS Code marketplace. Uses `GH_TOKEN` if set to avoid anonymous rate limits when fetching GitHub IP ranges. Retries 3× on transient failures. | `FIREWALL=off` in `orgs/<org>/.env` |
 | Extra allowed domains | none | `EXTRA_ALLOWED_DOMAINS="host1 host2"` |
+| `claude` command inside container | wrapper at `/usr/local/bin/claude` always appends `--dangerously-skip-permissions` | call `/opt/claude-cli/bin/claude` for raw CLI |
 | Host filesystem | no arbitrary bind-mounts; user home is **not** exposed | N/A |
 | Host Claude config | `~/.claude/plugins` and `~/.claude/skills` **rw**; `settings.json` and `CLAUDE.md` **ro**; `keybindings.json` intentionally not mounted | `--no-host-mounts` disables all host bind-mounts |
 | Brain vault | RW-mounted at `/brain` on all orgs | `--no-host-mounts` |
