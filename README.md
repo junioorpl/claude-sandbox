@@ -37,8 +37,10 @@ Fork of Anthropic's reference devcontainer, wrapped with a per-org launcher, Doc
 
 ```bash
 ./bin/setup
-# prompts for org name, git identity, optional editor pass, then launches
+# prompts for org name, git identity, optional shell alias install, optional editor pass, then launches
 ```
+
+After the alias is installed (and `source ~/.zshrc` / new terminal), you can run `claude-sandbox <org>` from anywhere instead of the full `./bin/claude-sandbox …` path. Install or refresh it standalone via `./bin/install-alias`.
 
 4. Inside the container:
 

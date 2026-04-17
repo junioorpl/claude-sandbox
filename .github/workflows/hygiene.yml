@@ -23,5 +23,5 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - run: sudo apt-get update && sudo apt-get install -y shellcheck bats
-      - run: shellcheck bin/claude-sandbox bin/setup bin/publish-image .devcontainer/init-firewall-wrapper.sh
+      - run: shellcheck bin/claude-sandbox bin/setup bin/install-alias bin/publish-image .devcontainer/init-firewall-wrapper.sh
       - run: bats tests/launcher.bats tests/firewall.bats
