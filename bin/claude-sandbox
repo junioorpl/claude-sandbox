@@ -92,7 +92,7 @@ cmd_list() {
 cmd_build() {
   require_docker
   log "Building image locally…"
-  docker compose build
+  ORG="__build__" docker compose build dev
 }
 
 cmd_upgrade() {
