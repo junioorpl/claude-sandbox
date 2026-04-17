@@ -137,11 +137,10 @@ EOF
 GIT_USER_NAME=x
 GIT_USER_EMAIL=x@x
 EOF
-  # Hide real editors from PATH so auto-detect fails deterministically.
-  run env PATH=/nonexistent "$TMP/bin/claude-sandbox" acme ide
+  # Minimal PATH so bash + coreutils work but no editors resolve.
+  run env PATH="/usr/bin:/bin" "$TMP/bin/claude-sandbox" acme ide
   [ "$status" -ne 0 ]
-  # Either docker not found or editor not found — both are acceptable failure modes here.
-  [[ "$output" == *"not found"* ]] || [[ "$output" == *"not on PATH"* ]]
+  [[ "$output" == *"no supported editor"* ]]
   rm -rf "$TMP"
 }
 

@@ -191,7 +191,7 @@ hex_encode() {
 }
 
 cmd_ide() {
-  require_docker
+  # Parse args first so bad input fails fast (before docker/editor lookups).
   local editor="auto"
   local repo=""
   while [ $# -gt 0 ]; do
@@ -203,6 +203,7 @@ cmd_ide() {
   done
 
   editor="$(detect_editor "$editor")"
+  require_docker
 
   # Ensure container is running (idempotent — reuses existing).
   ensure_cli_volume_populated
