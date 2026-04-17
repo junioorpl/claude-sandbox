@@ -140,7 +140,8 @@ run_service() {
   local extra_args=("$@")
   ensure_cli_volume_populated
   pre_create_host_mounts
-  exec docker compose run --rm "${extra_args[@]}" "$service"
+  # ${arr[@]+"${arr[@]}"} expansion is safe under set -u even when arr is empty.
+  exec docker compose run --rm ${extra_args[@]+"${extra_args[@]}"} "$service"
 }
 
 main() {
