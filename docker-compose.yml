@@ -4,10 +4,13 @@
 name: claude-sandbox
 
 x-base-service: &base-service
-  image: ghcr.io/junioorpl/claude-sandbox:latest
+  # Override via IMAGE env (set in orgs/<org>/.env or shell) to pull from a fork's GHCR.
+  image: ${IMAGE:-ghcr.io/junioorpl/claude-sandbox:latest}
   build:
     context: .devcontainer
     dockerfile: Dockerfile
+    args:
+      NODE_IMAGE: ${NODE_IMAGE:-node:20-bookworm}
   cap_add:
     - NET_ADMIN
     - NET_RAW
@@ -33,13 +36,19 @@ x-base-service: &base-service
       if [ -n "$$GIT_USER_NAME" ]; then git config --global user.name "$$GIT_USER_NAME"; fi
       if [ -n "$$GIT_USER_EMAIL" ]; then git config --global user.email "$$GIT_USER_EMAIL"; fi
       if [ -n "$$REPOS" ]; then
-        for url in $$REPOS; do
+        # Accept either newline- or space-delimited REPOS for backwards compat.
+        # Use process substitution so `exit 1` inside the loop propagates up.
+        while IFS= read -r url; do
+          [ -z "$$url" ] && continue
           name=$$(basename -s .git "$$url")
           if [ ! -d "/workspace/$$name" ]; then
             echo "[bootstrap] cloning $$url"
-            git clone "$$url" "/workspace/$$name" || echo "[bootstrap] WARN failed to clone $$url"
+            if ! git clone "$$url" "/workspace/$$name"; then
+              echo "[bootstrap] ERROR failed to clone $$url" >&2
+              exit 1
+            fi
           fi
-        done
+        done < <(printf '%s\n' "$$REPOS" | tr ' ' '\n')
       fi
       exec zsh
 
@@ -56,7 +65,11 @@ services:
       - ${HOME}/.claude/skills:/home/node/.claude/skills
       - ${HOME}/.claude/settings.json:/home/node/.claude/settings.json:ro
       - ${HOME}/.claude/CLAUDE.md:/home/node/.claude/CLAUDE.md:ro
-      - ${HOME}/cabral-dev/brain:/brain
+      # Brain vault mount — opt-in. Set BRAIN_PATH in orgs/<org>/.env to
+      # mount an external knowledge directory (e.g., Obsidian vault) at /brain.
+      # When unset, launcher substitutes an empty scratch dir so the mount
+      # always exists without requiring a personal path in this shared config.
+      - ${BRAIN_PATH:?BRAIN_PATH must be set — launcher sets a default if not provided in .env}:/brain
       - ${HOME}/.ssh:/home/node/.ssh:ro
 
   throwaway:
@@ -69,7 +82,11 @@ services:
       - ${HOME}/.claude/skills:/home/node/.claude/skills
       - ${HOME}/.claude/settings.json:/home/node/.claude/settings.json:ro
       - ${HOME}/.claude/CLAUDE.md:/home/node/.claude/CLAUDE.md:ro
-      - ${HOME}/cabral-dev/brain:/brain
+      # Brain vault mount — opt-in. Set BRAIN_PATH in orgs/<org>/.env to
+      # mount an external knowledge directory (e.g., Obsidian vault) at /brain.
+      # When unset, launcher substitutes an empty scratch dir so the mount
+      # always exists without requiring a personal path in this shared config.
+      - ${BRAIN_PATH:?BRAIN_PATH must be set — launcher sets a default if not provided in .env}:/brain
       - ${HOME}/.ssh:/home/node/.ssh:ro
 
   agent:
@@ -83,7 +100,11 @@ services:
       - ${HOME}/.claude/skills:/home/node/.claude/skills
       - ${HOME}/.claude/settings.json:/home/node/.claude/settings.json:ro
       - ${HOME}/.claude/CLAUDE.md:/home/node/.claude/CLAUDE.md:ro
-      - ${HOME}/cabral-dev/brain:/brain
+      # Brain vault mount — opt-in. Set BRAIN_PATH in orgs/<org>/.env to
+      # mount an external knowledge directory (e.g., Obsidian vault) at /brain.
+      # When unset, launcher substitutes an empty scratch dir so the mount
+      # always exists without requiring a personal path in this shared config.
+      - ${BRAIN_PATH:?BRAIN_PATH must be set — launcher sets a default if not provided in .env}:/brain
       - ${HOME}/.ssh:/home/node/.ssh:ro
 
   # Hermetic variant of dev — no host bind-mounts.
@@ -99,7 +120,7 @@ services:
   # Runs as root so it can write to a fresh (root-owned) named volume, then
   # chowns everything to uid 1000 (node user) for the dev containers.
   cli-init:
-    image: node:20
+    image: ${NODE_IMAGE:-node:20-bookworm}
     user: "0:0"
     volumes:
       - claude-cli-bin:/opt/claude-cli
