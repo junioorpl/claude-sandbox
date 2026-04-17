@@ -18,6 +18,12 @@ x-base-service: &base-service
   stdin_open: true
   working_dir: /workspace
   user: node
+  healthcheck:
+    test: ["CMD-SHELL", "test -x /opt/claude-cli/bin/claude"]
+    interval: 30s
+    timeout: 3s
+    retries: 3
+    start_period: 90s
   environment:
     NODE_OPTIONS: --max-old-space-size=4096
     CLAUDE_CONFIG_DIR: /home/node/.claude

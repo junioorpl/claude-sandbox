@@ -12,6 +12,17 @@ teardown() {
   rm -rf "$TMPDIR_LOCAL"
 }
 
+make_tmp_repo() {
+  # Replicates the repo tree into a temp dir so tests don't mutate the real one.
+  REPO="$BATS_TEST_DIRNAME/.."
+  TMP="$(mktemp -d)"
+  cp -r "$REPO/bin" "$TMP/"
+  cp -r "$REPO/.devcontainer" "$TMP/"
+  cp "$REPO/docker-compose.yml" "$TMP/" 2>/dev/null || true
+  mkdir -p "$TMP/orgs"
+  echo "$TMP"
+}
+
 @test "no args -> usage exit 0" {
   run "$LAUNCHER"
   [ "$status" -eq 0 ]
@@ -22,6 +33,16 @@ teardown() {
   run "$LAUNCHER" --help
   [ "$status" -eq 0 ]
   [[ "$output" == *"Usage:"* ]]
+}
+
+@test "usage lists new subcommands" {
+  run "$LAUNCHER" --help
+  [[ "$output" == *"ide"* ]]
+  [[ "$output" == *"up"* ]]
+  [[ "$output" == *"stop"* ]]
+  [[ "$output" == *"status"* ]]
+  [[ "$output" == *"logs"* ]]
+  [[ "$output" == *"pull-image"* ]]
 }
 
 @test "invalid org name (uppercase) rejected" {
@@ -44,10 +65,7 @@ teardown() {
 }
 
 @test "--list on empty orgs/ prints no-orgs message" {
-  REPO="$BATS_TEST_DIRNAME/.."
-  TMP="$(mktemp -d)"
-  cp -r "$REPO/bin" "$TMP/"
-  mkdir "$TMP/orgs"
+  TMP="$(make_tmp_repo)"
   run "$TMP/bin/claude-sandbox" --list
   [ "$status" -eq 0 ]
   [[ "$output" == *"no orgs configured"* ]]
@@ -55,9 +73,7 @@ teardown() {
 }
 
 @test "agent service without name -> error" {
-  REPO="$BATS_TEST_DIRNAME/.."
-  TMP="$(mktemp -d)"
-  cp -r "$REPO/bin" "$TMP/"
+  TMP="$(make_tmp_repo)"
   mkdir -p "$TMP/orgs/acme"
   echo "GIT_USER_NAME=x" > "$TMP/orgs/acme/.env"
   echo "GIT_USER_EMAIL=x@x" >> "$TMP/orgs/acme/.env"
@@ -76,9 +92,7 @@ teardown() {
 }
 
 @test "--no-host-mounts with non-dev service errors" {
-  REPO="$BATS_TEST_DIRNAME/.."
-  TMP="$(mktemp -d)"
-  cp -r "$REPO/bin" "$TMP/"
+  TMP="$(make_tmp_repo)"
   mkdir -p "$TMP/orgs/acme"
   cat > "$TMP/orgs/acme/.env" <<EOF
 GIT_USER_NAME=x
@@ -91,10 +105,7 @@ EOF
 }
 
 @test "vscode subcommand generates per-org .devcontainer" {
-  REPO="$BATS_TEST_DIRNAME/.."
-  TMP="$(mktemp -d)"
-  cp -r "$REPO/bin" "$TMP/"
-  cp -r "$REPO/.devcontainer" "$TMP/"
+  TMP="$(make_tmp_repo)"
   mkdir -p "$TMP/orgs/acme"
   echo "GIT_USER_NAME=x" > "$TMP/orgs/acme/.env"
   echo "GIT_USER_EMAIL=x@x" >> "$TMP/orgs/acme/.env"
@@ -102,5 +113,61 @@ EOF
   [ "$status" -eq 0 ]
   [ -f "$TMP/.devcontainer/.generated/acme/devcontainer.json" ]
   grep -q "claude-data-acme" "$TMP/.devcontainer/.generated/acme/devcontainer.json"
+  rm -rf "$TMP"
+}
+
+@test "unknown service name -> usage hint includes new subcommands" {
+  TMP="$(make_tmp_repo)"
+  mkdir -p "$TMP/orgs/acme"
+  cat > "$TMP/orgs/acme/.env" <<EOF
+GIT_USER_NAME=x
+GIT_USER_EMAIL=x@x
+EOF
+  run "$TMP/bin/claude-sandbox" acme totally-bogus
+  [ "$status" -ne 0 ]
+  [[ "$output" == *"unknown service"* ]]
+  [[ "$output" == *"ide"* ]]
+  rm -rf "$TMP"
+}
+
+@test "ide subcommand with unknown editor fails cleanly" {
+  TMP="$(make_tmp_repo)"
+  mkdir -p "$TMP/orgs/acme"
+  cat > "$TMP/orgs/acme/.env" <<EOF
+GIT_USER_NAME=x
+GIT_USER_EMAIL=x@x
+EOF
+  # Hide real editors from PATH so auto-detect fails deterministically.
+  run env PATH=/nonexistent "$TMP/bin/claude-sandbox" acme ide
+  [ "$status" -ne 0 ]
+  # Either docker not found or editor not found — both are acceptable failure modes here.
+  [[ "$output" == *"not found"* ]] || [[ "$output" == *"not on PATH"* ]]
+  rm -rf "$TMP"
+}
+
+@test "ide --repo needs a value" {
+  TMP="$(make_tmp_repo)"
+  mkdir -p "$TMP/orgs/acme"
+  cat > "$TMP/orgs/acme/.env" <<EOF
+GIT_USER_NAME=x
+GIT_USER_EMAIL=x@x
+EOF
+  run "$TMP/bin/claude-sandbox" acme ide --repo
+  [ "$status" -ne 0 ]
+  [[ "$output" == *"needs a value"* ]]
+  rm -rf "$TMP"
+}
+
+@test "BRAIN_PATH unset does not leak personal path warnings" {
+  # Regression: pre-BRAIN_PATH launcher warned "brain vault not found at cabral-dev/brain"
+  TMP="$(make_tmp_repo)"
+  mkdir -p "$TMP/orgs/acme"
+  cat > "$TMP/orgs/acme/.env" <<EOF
+GIT_USER_NAME=x
+GIT_USER_EMAIL=x@x
+EOF
+  if ! command -v docker >/dev/null; then skip "docker not installed"; fi
+  run env HOME="$HOME" "$TMP/bin/claude-sandbox" acme doctor
+  [[ "$output" != *"cabral-dev"* ]]
   rm -rf "$TMP"
 }
