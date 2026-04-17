@@ -69,3 +69,49 @@ jobs:
             echo "Bump VERSION per RELEASING.md or add [skip-version-check] to PR description." >&2
             exit 1
           fi
+
+  integration:
+    # Runs the end-to-end test suite (build image → firewall verify → cross-org
+    # isolation) on PRs and pushes that touch the container-build surface.
+    # Slower than shell-lint (~5-8 min) so path-gated — most PRs skip it.
+    runs-on: ubuntu-latest
+    needs: [shell-lint]
+    if: |
+      github.event_name == 'push' ||
+      contains(github.event.pull_request.labels.*.name, 'run-integration') ||
+      (github.event_name == 'pull_request')
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+        with:
+          fetch-depth: 0
+      - name: Detect container-surface changes
+        id: detect
+        env:
+          BASE_REF: ${{ github.event.pull_request.base.ref || github.event.repository.default_branch }}
+        run: |
+          set -e
+          if [ "${{ github.event_name }}" = "pull_request" ]; then
+            git fetch origin "$BASE_REF" --depth=1
+            changed="$(git diff --name-only "origin/$BASE_REF"...HEAD || true)"
+          else
+            changed="$(git diff --name-only "HEAD~1"...HEAD || true)"
+          fi
+          echo "Changed files:"
+          echo "$changed"
+          surface_re='^(\.devcontainer/|docker-compose\.yml$|bin/claude-sandbox$|tests/)'
+          if echo "$changed" | grep -Eq "$surface_re"; then
+            echo "run=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "run=false" >> "$GITHUB_OUTPUT"
+          fi
+      - name: Skip if container surface untouched
+        if: steps.detect.outputs.run != 'true'
+        run: echo "No container-surface changes; skipping integration."
+
+      - name: Run end-to-end integration
+        if: steps.detect.outputs.run == 'true'
+        timeout-minutes: 15
+        run: |
+          set -e
+          export BRAIN_PATH="$(mktemp -d)"
+          bash tests/integration.sh
