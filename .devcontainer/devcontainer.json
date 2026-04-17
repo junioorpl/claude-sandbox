@@ -55,6 +55,6 @@
     "EXTRA_ALLOWED_DOMAINS": "${localEnv:EXTRA_ALLOWED_DOMAINS:}"
   },
   "workspaceFolder": "/workspace",
-  "postStartCommand": "sudo /usr/local/bin/init-firewall-wrapper.sh",
+  "postStartCommand": "sudo --preserve-env=FIREWALL,EXTRA_ALLOWED_DOMAINS,GH_TOKEN /usr/local/bin/init-firewall-wrapper.sh",
   "waitFor": "postStartCommand"
 }

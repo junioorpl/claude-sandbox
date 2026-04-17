@@ -79,11 +79,19 @@ RUN sh -c "$(wget -O- https://github.com/deluan/zsh-in-docker/releases/download/
 # NOTE: Claude CLI install deliberately NOT here. See docs/superpowers/specs/
 # for the live-upgrade design. Launcher populates /opt/claude-cli on first run.
 
+# Wrapper that always passes --dangerously-skip-permissions. Sandbox is
+# the isolation boundary; prompting for permission inside every time defeats
+# the point. Users who need vanilla Claude can still call /opt/claude-cli/bin/claude.
+USER root
+RUN printf '#!/bin/bash\nexec /opt/claude-cli/bin/claude --dangerously-skip-permissions "$@"\n' > /usr/local/bin/claude && \
+  chmod +x /usr/local/bin/claude
+USER node
+
 # Firewall scripts
 COPY init-firewall.sh /usr/local/bin/init-firewall.sh
 COPY init-firewall-wrapper.sh /usr/local/bin/init-firewall-wrapper.sh
 USER root
 RUN chmod +x /usr/local/bin/init-firewall.sh /usr/local/bin/init-firewall-wrapper.sh && \
-  echo "node ALL=(root) NOPASSWD: /usr/local/bin/init-firewall-wrapper.sh, /usr/local/bin/init-firewall.sh" > /etc/sudoers.d/node-firewall && \
+  echo "node ALL=(root) NOPASSWD: SETENV: /usr/local/bin/init-firewall-wrapper.sh, SETENV: /usr/local/bin/init-firewall.sh" > /etc/sudoers.d/node-firewall && \
   chmod 0440 /etc/sudoers.d/node-firewall
 USER node
