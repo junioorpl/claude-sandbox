@@ -1,0 +1,15 @@
+**/.git
+**/.github
+**/*.md
+**/tests
+**/docs
+**/orgs
+**/plans
+**/.devcontainer/.generated
+**/.env
+**/.env.local
+**/compose.override.yml
+**/node_modules
+**/.DS_Store
+**/Thumbs.db
+**/LICENSE
