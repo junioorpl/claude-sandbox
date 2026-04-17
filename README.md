@@ -33,6 +33,13 @@ Fork of Anthropic's reference devcontainer, wrapped with a per-org launcher, Doc
 
    First run populates the shared Claude CLI volume (~30s) and pulls the image from GHCR.
 
+**Or just run the interactive setup:**
+
+```bash
+./bin/setup
+# prompts for org name, git identity, optional editor pass, then launches
+```
+
 4. Inside the container:
 
    ```bash
@@ -91,6 +98,16 @@ High-level:
 | Credentials | per-org volume (`claude-data-<org>`); never shared | N/A |
 
 Running `claude --dangerously-skip-permissions` is safe **only** when the firewall is on and you trust the repository you've cloned. See [Anthropic's devcontainer guidance](https://code.claude.com/docs/en/devcontainer) for context.
+
+## Maintainer tasks
+
+Flip the GHCR image to public (one-time, after first successful CI build):
+
+```bash
+# If gh token lacks packages scope, first run:
+gh auth refresh -h github.com -s read:packages,write:packages
+./bin/publish-image
+```
 
 ## License
 

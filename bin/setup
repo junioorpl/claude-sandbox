@@ -1,0 +1,89 @@
+#!/usr/bin/env bash
+# bin/setup — interactive first-time setup for claude-sandbox.
+# Creates orgs/<name>/.env from .env.example and launches the sandbox.
+set -euo pipefail
+
+REPO_ROOT="$(cd "$(dirname "$0")/.." && pwd)"
+cd "$REPO_ROOT"
+
+readonly COLOR_GREEN=$'\033[0;32m'
+readonly COLOR_YELLOW=$'\033[0;33m'
+readonly COLOR_RED=$'\033[0;31m'
+readonly COLOR_OFF=$'\033[0m'
+
+log()  { printf '%s[setup]%s %s\n' "$COLOR_GREEN" "$COLOR_OFF" "$*"; }
+warn() { printf '%s[setup]%s %s\n' "$COLOR_YELLOW" "$COLOR_OFF" "$*" >&2; }
+die()  { printf '%s[setup] ERROR:%s %s\n' "$COLOR_RED" "$COLOR_OFF" "$*" >&2; exit 1; }
+
+prompt() {
+  local varname="$1" message="$2" default="${3:-}"
+  local value
+  if [ -n "$default" ]; then
+    read -r -p "$message [$default]: " value
+    value="${value:-$default}"
+  else
+    read -r -p "$message: " value
+  fi
+  printf -v "$varname" '%s' "$value"
+}
+
+require() {
+  command -v "$1" >/dev/null || die "$1 not found on PATH ($2)"
+}
+
+# --- Preflight ---------------------------------------------------------------
+require docker "install Docker Desktop 4.30+ or Docker Engine 24+"
+docker info >/dev/null 2>&1 || die "docker daemon not running"
+[ -f bin/claude-sandbox ] || die "run this script from the claude-sandbox repo root"
+[ -f .env.example ]       || die ".env.example missing — is this a fresh clone?"
+
+# --- Org setup ---------------------------------------------------------------
+log "Welcome to claude-sandbox setup."
+
+ORG=""
+while [ -z "$ORG" ]; do
+  prompt ORG "Org name (lowercase letters, digits, dashes)" "personal"
+  if [[ ! "$ORG" =~ ^[a-z0-9-]+$ ]]; then
+    warn "invalid org name — use [a-z0-9-]+"
+    ORG=""
+  fi
+done
+
+ENV_FILE="orgs/$ORG/.env"
+if [ -f "$ENV_FILE" ]; then
+  prompt OVERWRITE "orgs/$ORG/.env already exists. Overwrite? (y/N)" "N"
+  [[ "$OVERWRITE" =~ ^[Yy]$ ]] || die "aborted by user"
+fi
+
+mkdir -p "orgs/$ORG"
+cp .env.example "$ENV_FILE"
+
+# --- Git identity ------------------------------------------------------------
+DEFAULT_NAME="$(git config --global user.name 2>/dev/null || true)"
+DEFAULT_EMAIL="$(git config --global user.email 2>/dev/null || true)"
+
+prompt GIT_NAME  "Git user.name (inside container)"  "${DEFAULT_NAME:-Your Name}"
+prompt GIT_EMAIL "Git user.email (inside container)" "${DEFAULT_EMAIL:-you@example.com}"
+
+sed -i.bak \
+  -e "s|^GIT_USER_NAME=.*|GIT_USER_NAME=\"$GIT_NAME\"|" \
+  -e "s|^GIT_USER_EMAIL=.*|GIT_USER_EMAIL=\"$GIT_EMAIL\"|" \
+  "$ENV_FILE"
+rm "$ENV_FILE.bak"
+
+log "Created $ENV_FILE"
+
+# --- Optional tweaks ---------------------------------------------------------
+prompt EDIT_NOW "Open $ENV_FILE in \$EDITOR now? (y/N)" "N"
+if [[ "$EDIT_NOW" =~ ^[Yy]$ ]]; then
+  "${EDITOR:-nano}" "$ENV_FILE"
+fi
+
+# --- Launch ------------------------------------------------------------------
+prompt LAUNCH "Launch sandbox now? (Y/n)" "Y"
+if [[ ! "$LAUNCH" =~ ^[Nn]$ ]]; then
+  log "Launching ./bin/claude-sandbox $ORG"
+  exec ./bin/claude-sandbox "$ORG"
+fi
+
+log "Setup complete. Launch later with: ./bin/claude-sandbox $ORG"
