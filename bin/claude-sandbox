@@ -1,0 +1,191 @@
+#!/usr/bin/env bash
+# bin/claude-sandbox — one-shot Claude sandbox launcher.
+# Usage: claude-sandbox <org> [service] [args...]
+set -euo pipefail
+
+REPO_ROOT="$(cd "$(dirname "$0")/.." && pwd)"
+cd "$REPO_ROOT"
+
+readonly ORGS_DIR="$REPO_ROOT/orgs"
+readonly COMPOSE_PROJECT="claude-sandbox"
+
+readonly COLOR_RED=$'\033[0;31m'
+readonly COLOR_YELLOW=$'\033[0;33m'
+readonly COLOR_OFF=$'\033[0m'
+
+log()   { printf '[claude-sandbox] %s\n' "$*"; }
+warn()  { printf '%s[claude-sandbox] %s%s\n' "$COLOR_YELLOW" "$*" "$COLOR_OFF" >&2; }
+err()   { printf '%s[claude-sandbox] ERROR: %s%s\n' "$COLOR_RED" "$*" "$COLOR_OFF" >&2; }
+die()   { err "$*"; exit 1; }
+
+usage() {
+  cat <<'USAGE'
+claude-sandbox — isolated Claude Code dev container per organization.
+
+Usage:
+  claude-sandbox <org>                    Interactive shell, persistent workspace
+  claude-sandbox <org> throwaway          --rm + anonymous workspace volume
+  claude-sandbox <org> agent <name>       Parallel instance (workspace-<org>-<name>)
+  claude-sandbox <org> vscode             Generate per-org devcontainer for VS Code
+  claude-sandbox --list                   List configured orgs
+  claude-sandbox --build                  Rebuild local image
+  claude-sandbox upgrade [version]        Upgrade shared Claude CLI volume
+  claude-sandbox doctor                   Diagnose image/volumes/CLI version
+  claude-sandbox --no-host-mounts <org>   Run without host bind-mounts (hermetic)
+  claude-sandbox -h | --help              Show this message
+USAGE
+}
+
+validate_org_name() {
+  local name="$1"
+  if [[ ! "$name" =~ ^[a-z0-9-]+$ ]]; then
+    die "invalid org name '$name' — must match [a-z0-9-]+"
+  fi
+}
+
+require_docker() {
+  command -v docker >/dev/null || die "docker not found on PATH"
+  docker info >/dev/null 2>&1 || die "docker daemon not reachable"
+}
+
+load_org_env() {
+  local org="$1"
+  local env_file="$ORGS_DIR/$org/.env"
+  [ -f "$env_file" ] || die "missing $env_file — create it from .env.example first"
+  # shellcheck disable=SC1090
+  set -a; source "$env_file"; set +a
+  export ORG="$org"
+}
+
+pre_create_host_mounts() {
+  # Compose bind-mounts fail if the source path is missing.
+  mkdir -p "$HOME/.claude/plugins" "$HOME/.claude/skills"
+  [ -f "$HOME/.claude/settings.json" ] || echo '{}' > "$HOME/.claude/settings.json"
+  [ -f "$HOME/.claude/CLAUDE.md" ] || touch "$HOME/.claude/CLAUDE.md"
+  if [ ! -d "$HOME/cabral-dev/brain" ]; then
+    warn "brain vault not found at \$HOME/cabral-dev/brain — /brain mount will fail. Use --no-host-mounts to skip."
+  fi
+}
+
+cmd_list() {
+  if [ ! -d "$ORGS_DIR" ]; then
+    echo "(no orgs configured)"
+    return 0
+  fi
+  local found=0
+  for d in "$ORGS_DIR"/*/; do
+    [ -d "$d" ] || continue
+    local name; name="$(basename "$d")"
+    [ "$name" = "." ] && continue
+    if [ -f "$d/.env" ]; then
+      echo "  $name"
+      found=1
+    fi
+  done
+  [ "$found" -eq 0 ] && echo "(no orgs configured — create orgs/<name>/.env)"
+}
+
+cmd_build() {
+  require_docker
+  log "Building image locally…"
+  docker compose build
+}
+
+cmd_upgrade() {
+  require_docker
+  local version="${1:-latest}"
+  log "Upgrading shared Claude CLI volume to version: $version"
+  CLAUDE_CLI_VERSION="$version" ORG="__cli_init__" \
+    docker compose run --rm cli-init
+}
+
+cmd_doctor() {
+  require_docker
+  log "Image:"
+  docker image inspect ghcr.io/junioorpl/claude-sandbox:latest --format '  {{.Id}} ({{.Created}})' 2>/dev/null || echo "  (not pulled)"
+  log "Volumes:"
+  docker volume ls --format '{{.Name}}' | grep -E '^(claude-cli-bin|claude-data-|workspace-)' | sed 's/^/  /' || true
+  log "CLI version in shared volume:"
+  docker run --rm -v claude-cli-bin:/opt/claude-cli --entrypoint /opt/claude-cli/bin/claude node:20 --version 2>/dev/null \
+    || echo "  (not initialized — run: claude-sandbox upgrade)"
+}
+
+ensure_cli_volume_populated() {
+  require_docker
+  if ! docker run --rm -v claude-cli-bin:/opt/claude-cli node:20 test -x /opt/claude-cli/bin/claude 2>/dev/null; then
+    log "First-time setup: populating claude-cli-bin volume with latest CLI"
+    cmd_upgrade latest
+  fi
+}
+
+generate_vscode_devcontainer() {
+  local org="$1"
+  local out_dir="$REPO_ROOT/.devcontainer/.generated/$org"
+  mkdir -p "$out_dir"
+  sed "s/claude-data-default/claude-data-$org/g; \
+       s/workspace-default/workspace-$org/g; \
+       s/\"name\": \"Claude Sandbox (default org)\"/\"name\": \"Claude Sandbox ($org)\"/" \
+    "$REPO_ROOT/.devcontainer/devcontainer.json" > "$out_dir/devcontainer.json"
+  cp "$REPO_ROOT/.devcontainer/Dockerfile" "$out_dir/"
+  cp "$REPO_ROOT/.devcontainer/init-firewall.sh" "$out_dir/"
+  cp "$REPO_ROOT/.devcontainer/init-firewall-wrapper.sh" "$out_dir/"
+}
+
+run_service() {
+  local service="$1"; shift
+  local extra_args=("$@")
+  ensure_cli_volume_populated
+  pre_create_host_mounts
+  exec docker compose run --rm "${extra_args[@]}" "$service"
+}
+
+main() {
+  local no_host_mounts=0
+
+  case "${1:-}" in
+    -h|--help|'') usage; exit 0 ;;
+    --list) cmd_list; exit 0 ;;
+    --build) cmd_build; exit 0 ;;
+    doctor) cmd_doctor; exit 0 ;;
+    upgrade) shift; cmd_upgrade "${1:-latest}"; exit 0 ;;
+    --no-host-mounts) no_host_mounts=1; shift ;;
+  esac
+
+  local org="${1:-}"
+  [ -n "$org" ] || { usage; die "missing <org> argument"; }
+  shift
+  validate_org_name "$org"
+  load_org_env "$org"
+
+  local service="${1:-dev}"
+
+  if [ "$no_host_mounts" -eq 1 ] && [ "$service" = "dev" ]; then
+    run_service dev-hermetic
+  elif [ "$no_host_mounts" -eq 1 ]; then
+    die "--no-host-mounts only supported for dev service"
+  fi
+
+  case "$service" in
+    dev|throwaway) shift 2>/dev/null || true; run_service "$service" ;;
+    agent)
+      shift
+      local agent_name="${1:-}"
+      [ -n "$agent_name" ] || die "agent service requires a name: claude-sandbox <org> agent <name>"
+      validate_org_name "$agent_name"
+      export AGENT_NAME="$agent_name"
+      shift || true
+      run_service agent
+      ;;
+    vscode)
+      shift || true
+      generate_vscode_devcontainer "$org"
+      log "Generated .devcontainer/.generated/$org/"
+      log "Open in VS Code and use: Dev Containers → Reopen in Container"
+      log "VS Code will use .devcontainer/.generated/$org/devcontainer.json"
+      exit 0
+      ;;
+    *) die "unknown service '$service' (expected: dev|throwaway|agent|vscode)" ;;
+  esac
+}
+
+main "$@"
