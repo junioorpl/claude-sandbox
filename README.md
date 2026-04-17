@@ -74,6 +74,16 @@ $EDITOR orgs/acme/.env   # set acme-specific git identity, EXTRA_ALLOWED_DOMAINS
 
 Each org gets dedicated Docker volumes (`claude-data-<org>`, `workspace-<org>`). A container launched with `ORG=acme` cannot access `ORG=personal` volumes.
 
+## Auto-cloning repos
+
+Declare a `REPOS` list in `orgs/<org>/.env` to auto-clone repositories into `/workspace` on first launch:
+
+```dotenv
+REPOS="git@github.com:you/repo-a.git git@github.com:you/repo-b.git"
+```
+
+Clones are idempotent — existing dirs are skipped on subsequent launches. SSH URLs require the default `~/.ssh` bind-mount.
+
 ## Architecture
 
 See [`docs/superpowers/specs/`](./docs/superpowers/specs/) for the full design document and [`docs/superpowers/plans/`](./docs/superpowers/plans/) for the KERNEL-format implementation plan.
@@ -95,6 +105,7 @@ High-level:
 | Host filesystem | no arbitrary bind-mounts; user home is **not** exposed | N/A |
 | Host Claude config | `~/.claude/plugins` and `~/.claude/skills` **rw**; `settings.json` and `CLAUDE.md` **ro**; `keybindings.json` intentionally not mounted | `--no-host-mounts` disables all host bind-mounts |
 | Brain vault | RW-mounted at `/brain` on all orgs | `--no-host-mounts` |
+| SSH keys | `~/.ssh` **ro**-mounted so containers can `git clone`/`push` via SSH — keys are readable, not modifiable | `--no-host-mounts` |
 | Credentials | per-org volume (`claude-data-<org>`); never shared | N/A |
 
 Running `claude --dangerously-skip-permissions` is safe **only** when the firewall is on and you trust the repository you've cloned. See [Anthropic's devcontainer guidance](https://code.claude.com/docs/en/devcontainer) for context.
