@@ -111,6 +111,11 @@ jobs:
       - name: Run end-to-end integration
         if: steps.detect.outputs.run == 'true'
         timeout-minutes: 15
+        env:
+          # GHA runners share a public IP; anonymous GitHub API hits the
+          # global quota fast. Use the job's GITHUB_TOKEN as a bearer so
+          # the firewall init's meta fetch works on every run.
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           set -e
           export BRAIN_PATH="$(mktemp -d)"

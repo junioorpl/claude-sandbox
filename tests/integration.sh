@@ -12,6 +12,8 @@ GIT_USER_NAME=IntegrationTest
 GIT_USER_EMAIL=integration@test.local
 FIREWALL=on
 CLAUDE_CLI_VERSION=latest
+# GH_TOKEN from runner env (CI) is inherited via docker compose env-from-shell.
+GH_TOKEN=${GH_TOKEN:-}
 EOF
 
 # BRAIN_PATH defaults handled by launcher; for direct compose invocations below
