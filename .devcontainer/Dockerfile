@@ -1,6 +1,11 @@
 # Forked from anthropics/claude-code/.devcontainer/Dockerfile
 # See .devcontainer/UPSTREAM.md for drift log and upstream SHA.
 
+# Base image is a build arg so docker-compose + Dockerfile stay in sync via
+# a single NODE_IMAGE var. Pin to a digest (node:20-bookworm@sha256:<digest>)
+# for reproducibility — run `./bin/update-base-digest` to populate the digest
+# on first clone; Dependabot bumps it weekly thereafter (.github/dependabot.yml
+# has a docker rule pointed at .devcontainer/).
 ARG NODE_IMAGE=node:20-bookworm
 FROM ${NODE_IMAGE}
 

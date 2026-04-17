@@ -1,0 +1,53 @@
+#!/usr/bin/env bash
+# bin/update-base-digest — pin .env.example NODE_IMAGE to the current
+# node:20-bookworm digest. Run on the host once after cloning; Dependabot
+# bumps it thereafter via the docker ecosystem rule in .github/dependabot.yml.
+set -euo pipefail
+
+REPO_ROOT="$(cd "$(dirname "$0")/.." && pwd)"
+cd "$REPO_ROOT"
+
+readonly COLOR_GREEN=$'\033[0;32m'
+readonly COLOR_YELLOW=$'\033[0;33m'
+readonly COLOR_RED=$'\033[0;31m'
+readonly COLOR_OFF=$'\033[0m'
+
+log()  { printf '%s[update-base-digest]%s %s\n' "$COLOR_GREEN" "$COLOR_OFF" "$*"; }
+warn() { printf '%s[update-base-digest]%s %s\n' "$COLOR_YELLOW" "$COLOR_OFF" "$*" >&2; }
+die()  { printf '%s[update-base-digest] ERROR:%s %s\n' "$COLOR_RED" "$COLOR_OFF" "$*" >&2; exit 1; }
+
+BASE_IMAGE_TAG="${BASE_IMAGE_TAG:-node:20-bookworm}"
+TARGET_FILE="$REPO_ROOT/.devcontainer/Dockerfile"
+
+command -v docker >/dev/null || die "docker not found on PATH"
+
+log "Inspecting $BASE_IMAGE_TAG on the configured registry…"
+digest="$(docker manifest inspect "$BASE_IMAGE_TAG" 2>/dev/null \
+  | jq -r '.manifests[0].digest // .config.digest // empty' 2>/dev/null || true)"
+
+if [ -z "$digest" ] || [ "$digest" = "null" ]; then
+  # Some manifest lists don't surface a top-level digest; fall back to docker pull + docker image inspect.
+  log "manifest inspect returned nothing usable — falling back to docker pull"
+  docker pull "$BASE_IMAGE_TAG" >/dev/null
+  digest="$(docker image inspect --format '{{index .RepoDigests 0}}' "$BASE_IMAGE_TAG" | awk -F@ '{print $2}')"
+fi
+
+[ -n "$digest" ] || die "could not resolve digest for $BASE_IMAGE_TAG"
+[[ "$digest" =~ ^sha256:[0-9a-f]{64}$ ]] || die "resolved digest has unexpected format: $digest"
+
+pinned="${BASE_IMAGE_TAG}@${digest}"
+log "Resolved: $pinned"
+
+if grep -qE '^ARG NODE_IMAGE=.*@sha256:[0-9a-f]{64}' "$TARGET_FILE"; then
+  sed -i.bak -E "s|^(ARG NODE_IMAGE=).*\$|\1${pinned}|" "$TARGET_FILE"
+elif grep -qE '^ARG NODE_IMAGE=' "$TARGET_FILE"; then
+  sed -i.bak -E "s|^(ARG NODE_IMAGE=).*\$|\1${pinned}|" "$TARGET_FILE"
+else
+  die "no ARG NODE_IMAGE= line in $TARGET_FILE"
+fi
+rm -f "$TARGET_FILE.bak"
+
+log "Updated $TARGET_FILE:"
+grep '^ARG NODE_IMAGE=' "$TARGET_FILE"
+log "Commit:"
+log "  git add $TARGET_FILE && git commit -m 'chore(deps): pin node base image to $digest'"
