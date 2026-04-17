@@ -38,7 +38,7 @@ See [`docs/superpowers/specs/`](./docs/superpowers/specs/) for the full design d
 High-level:
 
 - **Base image**: fork of `anthropics/claude-code/.devcontainer` — Node 20 slim, firewall allowlist, git, zsh, fzf
-- **Per-org named volumes**: `claude-creds-<org>`, `claude-projects-<org>`, `workspace-<org>`
+- **Per-org named volumes**: `claude-data-<org>`, `workspace-<org>`
 - **Shared host bind-mounts**: plugins, skills, settings, CLAUDE.md, Obsidian vault (optional)
 - **Shared CLI volume**: `claude-cli-bin` — live-upgradeable without container restart
 - **Launcher**: `bin/claude-sandbox <org>` drops you into an interactive shell with the right context

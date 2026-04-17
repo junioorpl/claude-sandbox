@@ -66,9 +66,10 @@ Isolation is enforced through per-org named Docker volumes for anything that car
 
 | Volume | Mount | Purpose |
 |---|---|---|
-| `claude-creds-<ORG>` | `/home/node/.claude/.credentials.json`, `/home/node/.claude/statsig`, `/home/node/.claude/todos` | Login tokens, session telemetry, per-org ephemeral state |
-| `claude-projects-<ORG>` | `/home/node/.claude/projects` | Per-project history, memory, transcripts |
+| `claude-data-<ORG>` | `/home/node/.claude` | All per-org Claude state (credentials, projects, statsig, todos). Shared host subpaths bind-mount on top to shadow `plugins/`, `skills/`, `settings.json`, `CLAUDE.md`. |
 | `workspace-<ORG>` | `/workspace` | Cloned repos, build artifacts, persistent work |
+
+The volume-then-shadow pattern mirrors upstream's `claude-code-config-${devcontainerId}` single-volume approach and avoids the anti-pattern of two named volumes mounted into overlapping paths (which Docker does not permit).
 
 **Shared host bind-mounts** (identical across all orgs — see Host Integration Mounts below):
 
@@ -77,7 +78,6 @@ Isolation is enforced through per-org named Docker volumes for anything that car
 | `~/.claude/plugins` | `/home/node/.claude/plugins` | rw | Plugin install state (changes propagate both ways) |
 | `~/.claude/skills` | `/home/node/.claude/skills` | rw | User-authored skills |
 | `~/.claude/settings.json` | `/home/node/.claude/settings.json` | ro | Global settings |
-| `~/.claude/keybindings.json` | `/home/node/.claude/keybindings.json` | ro | Keybindings (if present) |
 | `~/.claude/CLAUDE.md` | `/home/node/.claude/CLAUDE.md` | ro | Global user instructions |
 | `~/cabral-dev/brain` | `/brain` | rw | Obsidian vault for auto-save per CLAUDE.md rules |
 
@@ -162,7 +162,7 @@ Responsibilities:
 | `throwaway` | `--rm`, anonymous workspace, no persistence between runs. |
 | `agent` | Template for parallel runs; accepts `AGENT_NAME` to derive a distinct workspace volume (`workspace-<ORG>-<AGENT_NAME>`). Auth + config volumes still shared with org. |
 
-All services share the same image and the same `claude-creds-<ORG>` / `claude-projects-<ORG>` / `claude-cli-bin` volumes, plus the host bind-mounts listed in Host Integration Mounts.
+All services share the same image and the same `claude-data-<ORG>` / `claude-cli-bin` volumes, plus the host bind-mounts listed in Host Integration Mounts.
 
 ### Distribution
 
