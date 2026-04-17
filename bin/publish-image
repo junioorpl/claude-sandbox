@@ -48,7 +48,10 @@ gh api --method PATCH \
 
 # Verify anonymous pull works
 log "verifying anonymous access…"
+TOKEN=$(curl -s "https://ghcr.io/token?service=ghcr.io&scope=repository:$OWNER/$PACKAGE:pull" | jq -r .token)
 HTTP=$(curl -sL -o /dev/null -w "%{http_code}" \
+  -H "Authorization: Bearer $TOKEN" \
+  -H "Accept: application/vnd.oci.image.index.v1+json,application/vnd.docker.distribution.manifest.list.v2+json,application/vnd.docker.distribution.manifest.v2+json,application/vnd.oci.image.manifest.v1+json" \
   "https://ghcr.io/v2/$OWNER/$PACKAGE/manifests/latest" || echo "000")
 
 if [ "$HTTP" = "200" ]; then
