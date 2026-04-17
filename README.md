@@ -247,7 +247,7 @@ Feature tracker. Items get ticked off when shipped. File an issue to propose add
 - [x] Fail-loud bootstrap: container exits on repo-clone failure
 - [x] All GitHub Actions pinned by commit SHA
 - [x] `.dockerignore` + `.editorconfig` + `CONTRIBUTING.md` + `SECURITY.md`
-- [ ] Base image (`node`) pinned by digest with Dependabot bumps (Dependabot will open the first PR)
+- [x] Base image (`node`) pinned by digest — `./bin/update-base-digest` sets the initial digest; Dependabot bumps thereafter
 
 ### Versioning + release discipline
 - [x] `VERSION` file drives semver tags (`:v1`, `:v1.2`, `:v1.2.3`, `:latest`, `:sha-<sha>`)
@@ -279,12 +279,12 @@ Feature tracker. Items get ticked off when shipped. File an issue to propose add
 - [x] Firewall: multi-A, IPv6 deny, refresh idempotency, malformed CIDR (bats static + integration)
 - [x] Launcher error paths: unknown service, invalid org, `ide --repo` arg validation
 - [x] `integration.sh` IPv6 deny check + REPOS fail-loud check + two-volume cross-org isolation
-- [ ] CI runs integration.sh on PRs touching `.devcontainer/` or compose (currently runs bats only)
+- [x] CI runs integration.sh on PRs touching `.devcontainer/`, compose, launcher, or tests
 
 ### Compose + maintainability
 - [x] `NODE_IMAGE` build arg shared between Dockerfile + `cli-init`
 - [x] Healthcheck on dev service (CLI binary present)
-- [ ] Volume mount anchors (Compose YAML merge rules limit how cleanly this works — deferred)
+- [x] Scalar volume-mount anchors (single-point-of-change for every mount path)
 
 ### Docs
 - [x] README "Firewall" section explains algorithm + refresh + verification
