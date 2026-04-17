@@ -2,11 +2,10 @@
 # See .devcontainer/UPSTREAM.md for drift log and upstream SHA.
 
 # Base image is a build arg so docker-compose + Dockerfile stay in sync via
-# a single NODE_IMAGE var. Pin to a digest (node:20-bookworm@sha256:<digest>)
-# for reproducibility — run `./bin/update-base-digest` to populate the digest
-# on first clone; Dependabot bumps it weekly thereafter (.github/dependabot.yml
-# has a docker rule pointed at .devcontainer/).
-ARG NODE_IMAGE=node:20-bookworm
+# a single NODE_IMAGE var. Pinned by manifest-list digest for reproducibility.
+# Dependabot bumps this weekly (.github/dependabot.yml has a docker rule
+# pointed at .devcontainer/). Hand-update via ./bin/update-base-digest.
+ARG NODE_IMAGE=node:20-bookworm@sha256:8789e1e0752d81088a085689c04fdb7a5b16e8102e353118a4b049bbf05db8ac
 FROM ${NODE_IMAGE}
 
 ARG TZ

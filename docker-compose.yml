@@ -32,7 +32,7 @@ x-base-service: &base-service
     context: .devcontainer
     dockerfile: Dockerfile
     args:
-      NODE_IMAGE: ${NODE_IMAGE:-node:20-bookworm}
+      NODE_IMAGE: ${NODE_IMAGE:-node:20-bookworm@sha256:8789e1e0752d81088a085689c04fdb7a5b16e8102e353118a4b049bbf05db8ac}
   cap_add:
     - NET_ADMIN
     - NET_RAW
@@ -138,7 +138,7 @@ services:
   # Runs as root so it can write to a fresh (root-owned) named volume, then
   # chowns everything to uid 1000 (node user) for the dev containers.
   cli-init:
-    image: ${NODE_IMAGE:-node:20-bookworm}
+    image: ${NODE_IMAGE:-node:20-bookworm@sha256:8789e1e0752d81088a085689c04fdb7a5b16e8102e353118a4b049bbf05db8ac}
     user: "0:0"
     volumes:
       - *m-cli-bin

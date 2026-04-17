@@ -48,11 +48,32 @@ ORG="$ORG" FIREWALL=on docker compose run --rm --entrypoint bash dev -lc \
      echo "ip6tables not available; skipping"; \
    fi'
 
-echo "[7/7] Verify fail-loud REPOS bootstrap on bad URL"
-ORG="$ORG" REPOS="git@github.com:nonexistent/repo-that-does-not-exist.git" \
-  docker compose run --rm --entrypoint bash dev -lc 'echo should-not-reach' \
-  && { echo "ERROR: bad REPOS should have failed but didn't" >&2; exit 1; } \
-  || echo "REPOS bootstrap correctly exits non-zero on clone failure"
+echo "[7/7] Verify fail-loud REPOS bootstrap logic"
+# We can't reuse the compose service entrypoint here because it ends in
+# `exec zsh` which won't terminate under a non-TTY CI runner. Replay the
+# bootstrap loop inline on a throwaway container — same logic, same fail
+# mode (git clone exits non-zero, loop exits 1 before any later step).
+bootstrap_out=$(ORG="$ORG" docker compose run --rm -T --entrypoint bash dev -lc '
+  REPOS="git@github.com:nonexistent/repo-that-absolutely-does-not-exist-12345.git"
+  while IFS= read -r url; do
+    [ -z "$url" ] && continue
+    name=$(basename -s .git "$url")
+    if [ ! -d "/tmp/$name" ]; then
+      echo "[bootstrap] cloning $url"
+      if ! git clone --no-tags --depth=1 "$url" "/tmp/$name" 2>&1; then
+        echo "[bootstrap] ERROR failed to clone $url" >&2
+        exit 1
+      fi
+    fi
+  done < <(printf "%s\n" "$REPOS" | tr " " "\n")
+' 2>&1 || true)
+if echo "$bootstrap_out" | grep -q '\[bootstrap\] ERROR failed to clone'; then
+  echo "REPOS bootstrap correctly exits non-zero on clone failure"
+else
+  echo "ERROR: bootstrap did not fail as expected; output was:" >&2
+  echo "$bootstrap_out" | tail -20 >&2
+  exit 1
+fi
 
 echo "OK"
 

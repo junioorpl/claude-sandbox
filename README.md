@@ -247,7 +247,7 @@ Feature tracker. Items get ticked off when shipped. File an issue to propose add
 - [x] Fail-loud bootstrap: container exits on repo-clone failure
 - [x] All GitHub Actions pinned by commit SHA
 - [x] `.dockerignore` + `.editorconfig` + `CONTRIBUTING.md` + `SECURITY.md`
-- [x] Base image (`node`) pinned by digest — `./bin/update-base-digest` sets the initial digest; Dependabot bumps thereafter
+- [x] Base image (`node`) pinned by digest — Dependabot bumps weekly; `./bin/update-base-digest` for hand-updates
 
 ### Versioning + release discipline
 - [x] `VERSION` file drives semver tags (`:v1`, `:v1.2`, `:v1.2.3`, `:latest`, `:sha-<sha>`)

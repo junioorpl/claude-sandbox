@@ -240,7 +240,7 @@ cmd_ide_cli() {
 cmd_doctor() {
   require_docker
   local image="${IMAGE:-ghcr.io/junioorpl/claude-sandbox:latest}"
-  local node_image="${NODE_IMAGE:-node:20-bookworm}"
+  local node_image="${NODE_IMAGE:-node:20-bookworm@sha256:8789e1e0752d81088a085689c04fdb7a5b16e8102e353118a4b049bbf05db8ac}"
 
   log "Image: $image"
   docker image inspect "$image" --format '  {{.Id}} ({{.Created}})' 2>/dev/null || echo "  (not pulled)"
@@ -282,7 +282,7 @@ cmd_doctor() {
 
 ensure_cli_volume_populated() {
   require_docker
-  local node_image="${NODE_IMAGE:-node:20-bookworm}"
+  local node_image="${NODE_IMAGE:-node:20-bookworm@sha256:8789e1e0752d81088a085689c04fdb7a5b16e8102e353118a4b049bbf05db8ac}"
   if ! docker run --rm -v claude-cli-bin:/opt/claude-cli "$node_image" test -x /opt/claude-cli/bin/claude 2>/dev/null; then
     log "First-time setup: populating claude-cli-bin volume with latest CLI"
     cmd_upgrade latest
