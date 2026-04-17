@@ -1,0 +1,65 @@
+#!/usr/bin/env bash
+# bin/install-alias — add `claude-sandbox` to user's shell as a global command.
+# Idempotent: re-runs update the existing block.
+set -euo pipefail
+
+REPO_ROOT="$(cd "$(dirname "$0")/.." && pwd)"
+LAUNCHER="$REPO_ROOT/bin/claude-sandbox"
+
+readonly COLOR_GREEN=$'\033[0;32m'
+readonly COLOR_YELLOW=$'\033[0;33m'
+readonly COLOR_RED=$'\033[0;31m'
+readonly COLOR_OFF=$'\033[0m'
+
+log()  { printf '%s[install-alias]%s %s\n' "$COLOR_GREEN" "$COLOR_OFF" "$*"; }
+warn() { printf '%s[install-alias]%s %s\n' "$COLOR_YELLOW" "$COLOR_OFF" "$*" >&2; }
+die()  { printf '%s[install-alias] ERROR:%s %s\n' "$COLOR_RED" "$COLOR_OFF" "$*" >&2; exit 1; }
+
+[ -x "$LAUNCHER" ] || die "launcher not found at $LAUNCHER"
+
+# --- Detect shell rc file ----------------------------------------------------
+shell_name="$(basename "${SHELL:-/bin/zsh}")"
+case "$shell_name" in
+  zsh)  rc_file="$HOME/.zshrc" ;;
+  bash)
+    if [ -f "$HOME/.bashrc" ]; then rc_file="$HOME/.bashrc"
+    elif [ -f "$HOME/.bash_profile" ]; then rc_file="$HOME/.bash_profile"
+    else rc_file="$HOME/.bashrc"; fi
+    ;;
+  fish) die "fish not supported — add '$LAUNCHER \$argv' as a function manually" ;;
+  *) die "unsupported shell: $shell_name" ;;
+esac
+
+# --- Block markers (idempotent updates) --------------------------------------
+begin_marker="# >>> claude-sandbox launcher >>>"
+end_marker="# <<< claude-sandbox launcher <<<"
+
+block=$(cat <<EOF
+$begin_marker
+# Installed by $REPO_ROOT/bin/install-alias
+claude-sandbox() { "$LAUNCHER" "\$@"; }
+$end_marker
+EOF
+)
+
+touch "$rc_file"
+
+if grep -q "$begin_marker" "$rc_file"; then
+  log "updating existing alias block in $rc_file"
+  # Remove old block, then append new one.
+  tmp="$(mktemp)"
+  awk -v begin="$begin_marker" -v end="$end_marker" '
+    $0==begin {skip=1; next}
+    $0==end   {skip=0; next}
+    !skip
+  ' "$rc_file" > "$tmp"
+  mv "$tmp" "$rc_file"
+else
+  log "appending alias block to $rc_file"
+fi
+
+printf '\n%s\n' "$block" >> "$rc_file"
+
+log "done. reload with:"
+log "  source $rc_file"
+log "then anywhere: claude-sandbox <org>"

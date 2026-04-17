@@ -73,6 +73,12 @@ rm "$ENV_FILE.bak"
 
 log "Created $ENV_FILE"
 
+# --- Optional: global shell alias -------------------------------------------
+prompt INSTALL_ALIAS "Install 'claude-sandbox' shell alias so you can run it from any directory? (Y/n)" "Y"
+if [[ ! "$INSTALL_ALIAS" =~ ^[Nn]$ ]]; then
+  "$REPO_ROOT/bin/install-alias"
+fi
+
 # --- Optional tweaks ---------------------------------------------------------
 prompt EDIT_NOW "Open $ENV_FILE in \$EDITOR now? (y/N)" "N"
 if [[ "$EDIT_NOW" =~ ^[Yy]$ ]]; then
