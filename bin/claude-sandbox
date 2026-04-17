@@ -120,7 +120,7 @@ cmd_upgrade() {
   require_docker
   local version="${1:-latest}"
   log "Upgrading shared Claude CLI volume to version: $version"
-  CLAUDE_CLI_VERSION="$version" ORG="__cli_init__" \
+  CLAUDE_CLI_VERSION="$version" ORG="__cli_init__" BRAIN_PATH="${BRAIN_PATH:-/tmp}" \
     docker compose run --rm cli-init
 }
 

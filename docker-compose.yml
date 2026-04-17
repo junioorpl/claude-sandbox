@@ -156,6 +156,7 @@ services:
 
 volumes:
   claude-cli-bin:
+    name: claude-cli-bin
   # Per-org volumes: the local compose key is static, but the actual Docker
   # volume name interpolates $ORG (and $AGENT_NAME for the agent variant).
   # Isolation guarantee: a container started with ORG=acme mounts
