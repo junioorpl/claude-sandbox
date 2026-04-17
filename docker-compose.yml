@@ -96,9 +96,11 @@ services:
 
   # One-shot CLI installer/upgrader for the shared volume.
   # Invoked by launcher: docker compose run --rm cli-init
+  # Runs as root so it can write to a fresh (root-owned) named volume, then
+  # chowns everything to uid 1000 (node user) for the dev containers.
   cli-init:
     image: node:20
-    user: node
+    user: "0:0"
     volumes:
       - claude-cli-bin:/opt/claude-cli
     environment:
@@ -108,7 +110,9 @@ services:
       - |
         set -euo pipefail
         echo "Installing @anthropic-ai/claude-code@$$CLAUDE_CLI_VERSION to /opt/claude-cli"
+        mkdir -p /opt/claude-cli
         npm install -g --prefix /opt/claude-cli "@anthropic-ai/claude-code@$$CLAUDE_CLI_VERSION"
+        chown -R 1000:1000 /opt/claude-cli
         /opt/claude-cli/bin/claude --version
 
 volumes:
