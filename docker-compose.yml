@@ -1,0 +1,113 @@
+# docker-compose.yml — claude-sandbox
+# Launched via bin/claude-sandbox <org> [service]. ORG is required.
+
+name: claude-sandbox
+
+x-base-service: &base-service
+  image: ghcr.io/junioorpl/claude-sandbox:latest
+  build:
+    context: .devcontainer
+    dockerfile: Dockerfile
+  cap_add:
+    - NET_ADMIN
+    - NET_RAW
+  tty: true
+  stdin_open: true
+  working_dir: /workspace
+  user: node
+  environment:
+    NODE_OPTIONS: --max-old-space-size=4096
+    CLAUDE_CONFIG_DIR: /home/node/.claude
+    POWERLEVEL9K_DISABLE_GITSTATUS: "true"
+    FIREWALL: ${FIREWALL:-on}
+    EXTRA_ALLOWED_DOMAINS: ${EXTRA_ALLOWED_DOMAINS:-}
+    GH_TOKEN: ${GH_TOKEN:-}
+    GIT_USER_NAME: ${GIT_USER_NAME:-}
+    GIT_USER_EMAIL: ${GIT_USER_EMAIL:-}
+    ORG: ${ORG:?ORG must be set — use bin/claude-sandbox <org>}
+  entrypoint: ["/bin/bash", "-c"]
+  command:
+    - |
+      sudo /usr/local/bin/init-firewall-wrapper.sh && \
+      if [ -n "$$GIT_USER_NAME" ]; then git config --global user.name "$$GIT_USER_NAME"; fi && \
+      if [ -n "$$GIT_USER_EMAIL" ]; then git config --global user.email "$$GIT_USER_EMAIL"; fi && \
+      exec zsh
+
+services:
+  # NOTE: volume order matters. Per-org claude-data volume mounts FIRST at
+  # /home/node/.claude, then host bind-mounts shadow specific subpaths.
+  dev:
+    <<: *base-service
+    volumes:
+      - claude-data:/home/node/.claude
+      - claude-cli-bin:/opt/claude-cli
+      - workspace:/workspace
+      - ${HOME}/.claude/plugins:/home/node/.claude/plugins
+      - ${HOME}/.claude/skills:/home/node/.claude/skills
+      - ${HOME}/.claude/settings.json:/home/node/.claude/settings.json:ro
+      - ${HOME}/.claude/CLAUDE.md:/home/node/.claude/CLAUDE.md:ro
+      - ${HOME}/cabral-dev/brain:/brain
+
+  throwaway:
+    <<: *base-service
+    volumes:
+      - claude-data:/home/node/.claude
+      - claude-cli-bin:/opt/claude-cli
+      # No named workspace volume — anonymous, discarded with --rm
+      - ${HOME}/.claude/plugins:/home/node/.claude/plugins
+      - ${HOME}/.claude/skills:/home/node/.claude/skills
+      - ${HOME}/.claude/settings.json:/home/node/.claude/settings.json:ro
+      - ${HOME}/.claude/CLAUDE.md:/home/node/.claude/CLAUDE.md:ro
+      - ${HOME}/cabral-dev/brain:/brain
+
+  agent:
+    <<: *base-service
+    profiles: [agent]
+    volumes:
+      - claude-data:/home/node/.claude
+      - claude-cli-bin:/opt/claude-cli
+      - workspace-agent:/workspace
+      - ${HOME}/.claude/plugins:/home/node/.claude/plugins
+      - ${HOME}/.claude/skills:/home/node/.claude/skills
+      - ${HOME}/.claude/settings.json:/home/node/.claude/settings.json:ro
+      - ${HOME}/.claude/CLAUDE.md:/home/node/.claude/CLAUDE.md:ro
+      - ${HOME}/cabral-dev/brain:/brain
+
+  # Hermetic variant of dev — no host bind-mounts.
+  dev-hermetic:
+    <<: *base-service
+    volumes:
+      - claude-data:/home/node/.claude
+      - claude-cli-bin:/opt/claude-cli
+      - workspace:/workspace
+
+  # One-shot CLI installer/upgrader for the shared volume.
+  # Invoked by launcher: docker compose run --rm cli-init
+  cli-init:
+    image: node:20
+    user: node
+    volumes:
+      - claude-cli-bin:/opt/claude-cli
+    environment:
+      CLAUDE_CLI_VERSION: ${CLAUDE_CLI_VERSION:-latest}
+    entrypoint: ["/bin/bash", "-c"]
+    command:
+      - |
+        set -euo pipefail
+        echo "Installing @anthropic-ai/claude-code@$$CLAUDE_CLI_VERSION to /opt/claude-cli"
+        npm install -g --prefix /opt/claude-cli "@anthropic-ai/claude-code@$$CLAUDE_CLI_VERSION"
+        /opt/claude-cli/bin/claude --version
+
+volumes:
+  claude-cli-bin:
+  # Per-org volumes: the local compose key is static, but the actual Docker
+  # volume name interpolates $ORG (and $AGENT_NAME for the agent variant).
+  # Isolation guarantee: a container started with ORG=acme mounts
+  # claude-data-acme / workspace-acme — there is no code path that lets it
+  # reach claude-data-personal.
+  claude-data:
+    name: claude-data-${ORG}
+  workspace:
+    name: workspace-${ORG}
+  workspace-agent:
+    name: workspace-${ORG}-${AGENT_NAME:-_unused}
