@@ -122,6 +122,7 @@ Mount map inside the container:
 | `/home/node/.claude/skills` | rw | host `~/.claude/skills` | skills propagate |
 | `/home/node/.claude/settings.json` | **ro** | host file | policy config; container cannot self-escalate |
 | `/home/node/.claude/CLAUDE.md` | **ro** | host file | global instructions |
+| `/home/node/.claude/hooks` | **ro** | host `~/.claude/hooks` | SessionStart / Stop / tool hooks propagate |
 | `/home/node/.ssh` | **ro** | host `~/.ssh` | keys readable for git, not modifiable |
 | `/brain` | rw | `$BRAIN_PATH` (opt-in) | knowledge vault (empty if unset) |
 
@@ -130,7 +131,7 @@ Two examples live in the repo to jumpstart your config:
 - [`.claude/settings.json.example`](./.claude/settings.json.example) — sandbox-friendly defaults
 - [`.claude/CLAUDE.md.example`](./.claude/CLAUDE.md.example) — a block to paste into your host `CLAUDE.md` so the model knows it's running sandboxed
 
-**Hooks caveat**: `~/.claude/hooks` is **not** mounted. Host-side hooks don't apply inside the container. Put sandbox-side hooks in your `CLAUDE.md` or a skill.
+**Hooks portability**: `~/.claude/hooks` is mounted **ro** at `/home/node/.claude/hooks`. For hook entries in `settings.json` to work both on the host and inside the container, write commands with `$HOME` (not a hardcoded `/Users/...` path) — e.g. `"command": "$HOME/.claude/hooks/my-hook.sh"`. SessionStart hooks additionally require a `matcher` field (`"startup|resume|clear"`) or the harness silently skips the entry.
 
 ## Brain vault (optional)
 
@@ -215,7 +216,7 @@ Docker Compose reads `compose.override.yml` automatically on every launch. The e
 | Outbound firewall | **on** — allowlist (GitHub, npm, Anthropic API, Sentry, VS Code marketplace); multi-A capture; 15-min refresh; IPv6 deny; rate-limited drop log | `FIREWALL=off`, `EXTRA_ALLOWED_DOMAINS=…`, `IPV6=allow` in `orgs/<org>/.env` |
 | `claude` command inside container | wrapper at `/usr/local/bin/claude` always appends `--dangerously-skip-permissions` | call `/opt/claude-cli/bin/claude` for raw CLI |
 | Host filesystem | no arbitrary bind-mounts; user home is **not** exposed | N/A |
-| Host Claude config | `~/.claude/plugins` and `~/.claude/skills` **rw**; `settings.json` and `CLAUDE.md` **ro**; `hooks/` and `keybindings.json` intentionally not mounted | `--no-host-mounts` disables all host bind-mounts |
+| Host Claude config | `~/.claude/plugins` and `~/.claude/skills` **rw**; `settings.json`, `CLAUDE.md`, and `hooks/` **ro**; `keybindings.json` intentionally not mounted | `--no-host-mounts` disables all host bind-mounts |
 | Brain vault | only mounted when `BRAIN_PATH` is set; scratch dir otherwise | `--no-host-mounts` |
 | SSH keys | `~/.ssh` **ro**-mounted so containers can `git clone`/`push` via SSH — keys are readable, not modifiable | `--no-host-mounts` |
 | Credentials | per-org volume (`claude-data-<org>`); never shared | N/A |

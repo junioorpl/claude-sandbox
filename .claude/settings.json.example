@@ -16,7 +16,8 @@
   "model": "claude-opus-4-7",
 
   "$notes": [
-    "Hooks on the host don't propagate into the container (.claude/hooks is not mounted by default). Put sandbox-wide hooks in CLAUDE.md or a skill.",
+    "Host `~/.claude/hooks` is mounted read-only at `/home/node/.claude/hooks`, so SessionStart/Stop/tool hooks defined here do fire inside containers. Write hook commands with `$HOME/.claude/hooks/...` (not `/Users/...`) so the same settings.json works on host and sandbox.",
+    "SessionStart hook entries need a `matcher` field (e.g. `\"startup|resume|clear\"`) — without it the Claude Code harness silently skips the entry.",
     "settings.json is mounted read-only. Changes must happen on the host and take effect on next container start.",
     "`permissions.additionalDirectories` extends the writable set beyond Claude's defaults; /workspace is already cwd so this is mostly for /brain visibility."
   ]
