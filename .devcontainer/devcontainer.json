@@ -18,7 +18,13 @@
         "anthropic.claude-code",
         "dbaeumer.vscode-eslint",
         "esbenp.prettier-vscode",
-        "eamodio.gitlens"
+        "eamodio.gitlens",
+        "yzhang.markdown-all-in-one",
+        "davidanson.vscode-markdownlint",
+        "bierner.markdown-mermaid",
+        "bierner.markdown-preview-github-styles",
+        "shd101wyy.markdown-preview-enhanced",
+        "foam.foam-vscode"
       ],
       "settings": {
         "editor.formatOnSave": true,
