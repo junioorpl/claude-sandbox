@@ -41,6 +41,8 @@ x-base-service: &base-service
   stdin_open: true
   working_dir: /workspace
   user: node
+  mem_limit: 4g
+  memswap_limit: 4g
   healthcheck:
     test: ["CMD-SHELL", "test -x /opt/claude-cli/bin/claude"]
     interval: 30s
@@ -48,7 +50,7 @@ x-base-service: &base-service
     retries: 3
     start_period: 90s
   environment:
-    NODE_OPTIONS: --max-old-space-size=4096
+    NODE_OPTIONS: --max-old-space-size=2048
     CLAUDE_CONFIG_DIR: /home/node/.claude
     BRAIN_DIR: /brain
     POWERLEVEL9K_DISABLE_GITSTATUS: "true"
