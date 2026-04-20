@@ -166,14 +166,14 @@ All services share the same image and the same `claude-data-<ORG>` / `claude-cli
 
 ### Distribution
 
-- **Source**: `github.com/euripedescabral/claude-sandbox` (public or private repo)
-- **Prebuilt image**: `ghcr.io/euripedescabral/claude-sandbox:latest`, tagged per Node LTS + commit SHA. Built by GitHub Actions on push to `main`.
+- **Source**: `github.com/junioorpl/claude-sandbox` (public or private repo)
+- **Prebuilt image**: `ghcr.io/junioorpl/claude-sandbox:latest`, tagged per Node LTS + commit SHA. Built by GitHub Actions on push to `main`.
 - **Compose default**: pulls from GHCR; `--build` flag forces local build
 
 ### New-machine setup
 
 ```bash
-git clone git@github.com:euripedescabral/claude-sandbox.git ~/claude-sandbox
+git clone git@github.com:junioorpl/claude-sandbox.git ~/claude-sandbox
 cd ~/claude-sandbox
 cp .env.example orgs/personal/.env && $EDITOR orgs/personal/.env
 ./bin/claude-sandbox personal

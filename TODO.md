@@ -105,7 +105,7 @@ node-heavy workloads. Drop-in replacement for Docker Desktop.
 ## Infra wiring
 
 ### Shared Postgres network (DONE — this setup)
-- `/Users/euripedescabral/cabral-dev/docker-compose.yml` → top-level pg
+- `~/cabral-dev/docker-compose.yml` → top-level pg
 - `claude-sandbox/compose.override.yml` → dev attaches to `cabral-dev_default`
 - Requires running the top-level compose before `claude-sandbox <org>`
 
